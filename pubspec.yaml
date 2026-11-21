@@ -1,0 +1,25 @@
+name: minserve_editor
+description: "Graphical editor for Minserve services"
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^10.1.9
+  minserve_core:
+    path: ../minserve/packages/minserve_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: DejaVuSansMono
+      fonts:
+        - asset: assets/fonts/DejaVuSansMono.ttf
+

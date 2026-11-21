@@ -148,6 +148,11 @@ Points d'attention :
 - **Dépôt public** pour Pages avec un compte gratuit : le code et ce document le seront aussi.
   À relire avant de publier (rien de privé dans les exemples de services, ni de nom de serveur
   ou de compte).
+- **Aucune ressource tierce** : par défaut, une application Flutter web charge CanvasKit et ses
+  polices depuis les serveurs de Google à chaque ouverture. On compile avec
+  `--no-web-resources-cdn` (vérifié : `useLocalCanvasKit` vaut `true`), et on embarque la police
+  de l'éditeur (DejaVu Sans Mono), car les polices du système ne sont pas accessibles depuis
+  CanvasKit. C'est ce qui garde vraie la règle « rien n'est envoyé ailleurs ».
 - **Pas d'en-têtes réglables** (Pages n'en permet pas) : pas d'isolation d'origine croisée, donc
   pas de WebAssembly multi-fil. Sans importance pour une application de ce genre ; à ne pas
   prévoir dans l'architecture.

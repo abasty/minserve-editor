@@ -7,8 +7,10 @@ Un service Minserve est un fichier `service.yaml` : des pages, ce qu'elles affic
 l'on peut y saisir et où mène chaque saisie. Sur un service de taille réelle, on perd vite la
 vue d'ensemble. L'éditeur est là pour la retrouver.
 
-> **État : projet à l'étude.** Il n'y a pas encore de code. Le dépôt contient pour l'instant la
-> proposition de conception, dans [documents/minserve-editor.md](documents/minserve-editor.md).
+> **État : étape 2 du plan** (voir [documents/minserve-editor.md](documents/minserve-editor.md)).
+> L'application ouvre un `service.yaml`, le modifie dans un éditeur de texte à numéros de ligne,
+> le lit en direct avec le code du serveur (`minserve_core`) et affiche la première erreur ou
+> « service valide ». On l'enregistre par un téléchargement. Pas encore de graphe ni d'aperçu.
 
 ## Ce que l'éditeur doit faire
 
@@ -32,6 +34,27 @@ vue d'ensemble. L'éditeur est là pour la retrouver.
 - **Tout se passe dans le navigateur.** On ouvre un fichier, on l'édite, on l'enregistre. Rien
   n'est envoyé à un serveur, et l'éditeur ne se connecte à aucun serveur Minserve.
 
+## Développer
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter run -d chrome
+```
+
+Le paquet `minserve_core` est pris par chemin local : le dépôt
+[minserve](https://github.com/abasty/minserve) doit se trouver à côté de celui-ci
+(`../minserve/packages/minserve_core`). Avant de compiler ailleurs que sur cette machine
+(GitHub Actions), il faudra le remplacer par une dépendance `git:` dans le `pubspec.yaml`.
+
+## Publier
+
+`./deploy-editor.sh` lance les tests, compile l'application et la pousse sur la branche
+`gh-pages`, servie par GitHub Pages. La compilation utilise `--no-web-resources-cdn` : CanvasKit
+et les polices sont servis avec l'application, rien n'est chargé depuis les serveurs de Google.
+La police de l'éditeur (DejaVu Sans Mono, licence Bitstream Vera) est embarquée dans `assets/fonts/`.
+
 ## Documentation
 
 - [documents/minserve-editor.md](documents/minserve-editor.md) : le but, l'architecture, les
@@ -46,8 +69,8 @@ vue d'ensemble. L'éditeur est là pour la retrouver.
 
 ## Publication
 
-La webapp sera servie par GitHub Pages, à l'adresse
-`https://abasty.github.io/minserve-editor/`.
+La webapp est servie par GitHub Pages, à l'adresse
+`https://abasty.github.io/minserve-editor/` (voir « Publier »).
 
 ## Licence
 
