@@ -336,6 +336,9 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    les règles qui y mènent, mais refuse tant qu'une valeur y renvoie (`debut`, `guide`,
    `exec.suivant`, `acces.sinon`…) : le message dit laquelle. Pas encore : tirer une flèche à la
    souris, changer la page de départ, éditer les transitions de programme (`exec.suivant`).
+   Un historique unique (`lib/src/history.dart`, 200 étapes) défait et refait la frappe (regroupée
+   par séries d'une seconde ou de même nombre de lignes) et les modifications du graphe ; il
+   remplace celui du champ de texte, qui ne voyait pas le graphe.
 5. **L'éditeur de page** en formulaires (saisie, règles, accès), avec repli en YAML.
 6. **Extraire `minterm_view`** de Minterm, puis **l'aperçu** d'une page.
 7. **L'aperçu d'un morceau**, les données de test, l'édition de l'`ecran` en liste

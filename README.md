@@ -13,7 +13,8 @@ vue d'ensemble. L'éditeur est là pour la retrouver.
 > pages, transitions, impasses, pages inaccessibles, liens globaux, recherche, et « Aller au
 > texte » depuis une page. Le graphe **modifie le texte** : créer, renommer et supprimer une
 > page, ajouter et retirer une transition (les autres lignes, commentaires compris, restent
-> telles quelles). On enregistre par un téléchargement.
+> telles quelles). **Défaire / refaire** (boutons ou Ctrl+Z, Ctrl+Y) valent pour la frappe comme
+> pour le graphe. On enregistre par un téléchargement.
 
 ## Ce que l'éditeur doit faire
 
