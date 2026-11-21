@@ -8,6 +8,7 @@ import 'diagnostics.dart';
 import 'file_access.dart';
 import 'graph/graph_panel.dart';
 import 'history.dart';
+import 'split_handle.dart';
 import 'graph/layout.dart';
 import 'graph/page_lines.dart';
 import 'graph/service_edit.dart';
@@ -86,6 +87,12 @@ class _EditorPageState extends State<EditorPage> {
 
   final _history = EditHistory();
 
+  /// Part de la largeur donnée au texte quand texte et graphe sont côte à côte
+  /// (réglée en tirant la poignée entre les deux).
+  double _textShare = 0.5;
+  double _shareAtDragStart = 0.5;
+  static const _minPane = 260.0;
+
   /// Reçoit les touches quand rien d'autre n'a le focus (graphe seul, par
   /// exemple), pour que Ctrl+Z et Ctrl+Y marchent partout.
   final _pageFocus = FocusNode(debugLabel: 'page');
@@ -138,8 +145,13 @@ class _EditorPageState extends State<EditorPage> {
     _useGraph(_diagnostics);
   }
 
-  void _goToPage(String name) {
-    final line = pageLines(_text.text)[name];
+  void _goToPage(String name, {String? section, int? rule}) {
+    final line = pageSectionLine(
+      _text.text,
+      name,
+      section: section,
+      rule: rule,
+    );
     if (line == null) return;
     // En vue « graphe » seule, il faut montrer le texte pour y aller.
     if (_mode == ViewMode.graph) setState(() => _mode = ViewMode.both);
@@ -172,6 +184,14 @@ class _EditorPageState extends State<EditorPage> {
     );
     setState(() => _setDiagnostics(result));
     return true;
+  }
+
+  /// Largeur du texte dans [total] pixels : la part choisie, sans qu'aucun des
+  /// deux volets ne devienne trop étroit.
+  double _textWidthIn(double total) {
+    final usable = total - SplitHandle.thickness;
+    final width = (usable * _textShare).clamp(_minPane, usable - _minPane);
+    return width.toDouble();
   }
 
   void _edited() {
@@ -376,12 +396,15 @@ class _EditorPageState extends State<EditorPage> {
                 final textWidth = switch (shown) {
                   ViewMode.text => box.maxWidth,
                   ViewMode.graph => 0.0,
-                  ViewMode.both => (box.maxWidth - 1) / 2,
+                  ViewMode.both => _textWidthIn(box.maxWidth),
                 };
                 final graphWidth = switch (shown) {
                   ViewMode.text => 0.0,
                   ViewMode.graph => box.maxWidth,
-                  ViewMode.both => (box.maxWidth - 1) / 2,
+                  ViewMode.both =>
+                    box.maxWidth -
+                        _textWidthIn(box.maxWidth) -
+                        SplitHandle.thickness,
                 };
                 return Stack(
                   children: [
@@ -400,8 +423,16 @@ class _EditorPageState extends State<EditorPage> {
                         left: textWidth,
                         top: 0,
                         bottom: 0,
-                        width: 1,
-                        child: const VerticalDivider(width: 1),
+                        width: SplitHandle.thickness,
+                        child: SplitHandle(
+                          key: const Key('split-text-graph'),
+                          axis: Axis.horizontal,
+                          onStart: () => _shareAtDragStart = _textShare,
+                          onDrag: (dx) => setState(
+                            () => _textShare =
+                                _shareAtDragStart + dx / box.maxWidth,
+                          ),
+                        ),
                       ),
                     Positioned(
                       right: 0,

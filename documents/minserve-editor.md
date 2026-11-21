@@ -340,6 +340,18 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    par séries d'une seconde ou de même nombre de lignes) et les modifications du graphe ; il
    remplace celui du champ de texte, qui ne voyait pas le graphe.
 5. **L'éditeur de page** en formulaires (saisie, règles, accès), avec repli en YAML.
+   *Faite pour les règles, la saisie (`zonesaisie`) et l'accès* (`lib/src/graph/page_forms.dart`).
+   Les formulaires sont des onglets du panneau de la page sélectionnée. **Chaque champ lit sa
+   valeur dans le texte et ne réécrit que sa clé** (`setValue` / `removeValue` de
+   `service_edit.dart`) : le reste de la page, les commentaires et les réglages que le formulaire
+   ne montre pas ne bougent pas ; ils sont signalés par une puce « +n » qui renvoie au texte.
+   Un champ n'écrit qu'à la fin de la saisie (Entrée ou perte du focus) ; si le serveur refuse la
+   valeur, le texte reste inchangé, la raison s'affiche et le champ reprend sa valeur. Règles :
+   saisie, touche, page suivante, ordre (les règles s'échangent ligne contre ligne), message
+   d'erreur `defaut`. Saisie : ligne, colonne, longueur, curseur, casse, regex et son message, et
+   touches de validation. Accès : comme le service / ouverte à tous / réservée aux connectés, avec
+   `sinon`, `message` et `mdp_provisoire`. Pas encore : `zonemessage`, `donnees`, `exec` (un
+   formulaire), conditions `si`, actions de compte et de message (`connexion`, `message`…).
 6. **Extraire `minterm_view`** de Minterm, puis **l'aperçu** d'une page.
 7. **L'aperçu d'un morceau**, les données de test, l'édition de l'`ecran` en liste
    d'instructions avec aperçu.

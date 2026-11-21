@@ -187,6 +187,8 @@ void editTests() {
     await loadTwo(tester);
     await tester.tap(find.byKey(const Key('node-b')));
     await tester.pump();
+    await tester.tap(find.text('Règles'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('add-rule')));
     await tester.pumpAndSettle();
     // Par défaut : vers la première autre page (a), touche ENVOI.
@@ -205,7 +207,9 @@ void editTests() {
     await loadTwo(tester);
     await tester.tap(find.byKey(const Key('node-a')));
     await tester.pump();
-    await tester.tap(find.byTooltip('Supprimer cette règle'));
+    await tester.tap(find.text('Règles'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rule-delete-0')));
     await tester.pumpAndSettle();
     // C'est la seule règle de a : on le dit avant.
     expect(find.textContaining('dernière règle'), findsOneWidget);

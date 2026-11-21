@@ -255,6 +255,96 @@ void main() {
     );
   });
 
+  test('écrire une valeur existante ne change que sa ligne', () {
+    final out = setValue(base, [
+      'pages',
+      'accueil',
+      'entree',
+      'zonesaisie',
+      'longueur',
+    ], 2);
+    final (removed, added) = changes(base, out);
+    expect(removed.length, 1);
+    expect(added.single, contains('longueur: 2'));
+    expect(parse(out).pages['accueil']!.input, isA<FieldInput>());
+  });
+
+  test('écrire puis retirer une clé d\'une table en ligne', () {
+    final path = ['pages', 'accueil', 'entree', 'zonesaisie', 'casse'];
+    final out = setValue(base, path, 'majuscules');
+    expect(out, contains('casse: majuscules'));
+    expect(valueAt(out, path), 'majuscules');
+    expect(removeValue(out, path), base);
+  });
+
+  test('écrire une valeur crée les tables qui manquent', () {
+    final out = setValue(base, ['pages', 'liste', 'acces', 'connecte'], false);
+    expect(out, contains('    acces:\n      connecte: false'));
+    final (removed, _) = changes(base, out);
+    expect(removed, isEmpty);
+    // Retirer la seule clé retire aussi la table vide.
+    expect(removeValue(out, ['pages', 'liste', 'acces', 'connecte']), base);
+  });
+
+  test('retirer une valeur absente ne change rien', () {
+    expect(removeValue(base, ['pages', 'accueil', 'acces', 'sinon']), base);
+  });
+
+  test('une valeur refusée par le serveur ne change rien', () {
+    expect(
+      () => setValue(base, [
+        'pages',
+        'accueil',
+        'entree',
+        'zonesaisie',
+        'longueur',
+      ], 99),
+      throwsA(isA<EditException>()),
+    );
+  });
+
+  test('déplacer une règle échange les deux lignes', () {
+    final out = moveRule(base, 'liste', 0, 1);
+    final rules = parse(out).pages['liste']!.action!.choices;
+    expect(rules.first.key, FunctionKey.envoi);
+    expect(rules.last.key, FunctionKey.retour);
+    expect(out.split('\n').length, base.split('\n').length);
+    expect(moveRule(out, 'liste', 1, -1), base);
+    expect(() => moveRule(base, 'liste', 0, -1), throwsA(isA<EditException>()));
+  });
+
+  test('régler l\'accès d\'une page', () {
+    var out = setAccess(base, 'liste', mode: AccessMode.members);
+    expect(out, contains('acces: {connecte: true}'));
+    expect(accessOf(out, 'liste').mode, AccessMode.members);
+    out = setAccess(
+      out,
+      'liste',
+      mode: AccessMode.members,
+      otherwise: 'accueil',
+      message: 'Réservé',
+      provisional: true,
+    );
+    final access = parse(out).pages['liste']!.access;
+    expect(access.requiresLogin, isTrue);
+    expect(access.otherwise, 'accueil');
+    expect(access.message, 'Réservé');
+    expect(access.provisionalOk, isTrue);
+    expect(accessOf(out, 'liste').otherwise, 'accueil');
+    out = setAccess(out, 'liste', mode: AccessMode.open);
+    expect(parse(out).pages['liste']!.access.requiresLogin, isFalse);
+    expect(out, contains('acces: {connecte: false}'));
+    // Retour au défaut : le texte d'origine.
+    expect(setAccess(out, 'liste', mode: AccessMode.inherit), base);
+  });
+
+  test('l\'accès « sinon » doit être une page', () {
+    expect(
+      () => setAccess(base, 'liste', mode: AccessMode.members, otherwise: 'zz'),
+      throwsA(isA<EditException>()),
+    );
+  });
+
   final example = File('../minserve/example/service.yaml');
   test('sur le service d\'exemple : seules les lignes concernées changent', () {
     final text = example.readAsStringSync();

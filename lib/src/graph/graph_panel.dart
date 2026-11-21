@@ -2,7 +2,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../split_handle.dart';
 import 'graph_dialogs.dart';
+import 'page_forms.dart';
 import 'layout.dart';
 import 'service_edit.dart';
 import 'service_graph.dart';
@@ -21,6 +23,8 @@ class GraphEditing {
 
 /// Le graphe des pages d'un service : une case par page, une flèche par
 /// transition. Toucher une page la sélectionne et met ses flèches en avant.
+enum _PageTab { overview, rules, input, access }
+
 class GraphPanel extends StatefulWidget {
   const GraphPanel({
     super.key,
@@ -35,7 +39,7 @@ class GraphPanel extends StatefulWidget {
   final GraphLayout layout;
 
   /// Demande d'aller à la déclaration de la page dans le texte.
-  final void Function(String page)? onGoToPage;
+  final void Function(String page, {String? section, int? rule})? onGoToPage;
 
   /// De quoi modifier le service depuis le graphe ; `null` : lecture seule.
   final GraphEditing? editing;
@@ -60,6 +64,15 @@ class _GraphPanelState extends State<GraphPanel> {
   /// Page à sélectionner dès qu'elle apparaît dans le graphe (créée ou
   /// renommée depuis ici).
   String? _pending;
+
+  /// L'onglet ouvert dans le panneau de la page sélectionnée.
+  _PageTab _tab = _PageTab.overview;
+
+  /// Hauteur du panneau de la page, une fois réglée en tirant sa poignée ;
+  /// sinon il prend la hauteur de son contenu.
+  double? _detailsHeight;
+  double _heightAtDragStart = 0;
+  final _detailsKey = GlobalKey();
 
   @override
   void dispose() {
@@ -196,18 +209,18 @@ class _GraphPanelState extends State<GraphPanel> {
     );
   }
 
-  Future<void> _removeRule(GraphEdge e, GraphRule rule) async {
+  Future<void> _removeRuleAt(String from, int index, String to) async {
     final editing = widget.editing!;
     var only = false;
     try {
-      only = isOnlyRule(editing.text(), e.from);
+      only = isOnlyRule(editing.text(), from);
     } on EditException {
       only = false;
     }
     if (only) {
       final ok = await confirmDialog(
         context,
-        title: 'Supprimer la dernière règle de « ${e.from} » ?',
+        title: 'Supprimer la dernière règle de « $from » ?',
         body:
             'Une saisie ne peut pas rester sans règle : la page perd aussi sa '
             'zone de saisie (entree et action).',
@@ -215,7 +228,7 @@ class _GraphPanelState extends State<GraphPanel> {
       );
       if (!ok || !mounted) return;
     }
-    editing.apply((t) => removeRule(t, e.from, rule.index, e.to));
+    editing.apply((t) => removeRule(t, from, index, to));
   }
 
   void _mark(String by, List<String> names) {
@@ -308,7 +321,22 @@ class _GraphPanelState extends State<GraphPanel> {
             },
           ),
         ),
-        if (_selected != null) _details(_selected!),
+        if (_selected != null) ...[
+          SplitHandle(
+            key: const Key('split-graph-details'),
+            axis: Axis.vertical,
+            onStart: () => _heightAtDragStart =
+                _detailsKey.currentContext?.size?.height ?? 200,
+            // Tirer vers le haut agrandit le panneau.
+            onDrag: (dy) => setState(
+              () => _detailsHeight = (_heightAtDragStart - dy).clamp(
+                80.0,
+                MediaQuery.sizeOf(context).height * 0.75,
+              ),
+            ),
+          ),
+          _details(_selected!),
+        ],
       ],
     );
   }
@@ -461,10 +489,20 @@ class _GraphPanelState extends State<GraphPanel> {
     final out = graph.outgoing(name).toList();
     final inn = graph.incoming(name).where((e) => !e.isLoop).toList();
     final theme = Theme.of(context);
+    final editing = widget.editing;
+    final tab = editing == null ? _PageTab.overview : _tab;
+    final fixed = _detailsHeight;
     return Material(
+      key: _detailsKey,
       color: theme.colorScheme.surfaceContainer,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 190),
+        constraints: fixed != null
+            ? BoxConstraints.tightFor(height: fixed)
+            : BoxConstraints(
+                maxHeight: editing == null
+                    ? 190
+                    : (tab == _PageTab.overview ? 250 : 300),
+              ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -478,7 +516,15 @@ class _GraphPanelState extends State<GraphPanel> {
                   ),
                   if (widget.onGoToPage != null)
                     TextButton.icon(
-                      onPressed: () => widget.onGoToPage!(name),
+                      onPressed: () => widget.onGoToPage!(
+                        name,
+                        section: switch (_tab) {
+                          _PageTab.overview => null,
+                          _PageTab.rules => 'action',
+                          _PageTab.input => 'entree',
+                          _PageTab.access => 'acces',
+                        },
+                      ),
                       icon: const Icon(Icons.code, size: 18),
                       label: const Text('Aller au texte'),
                     ),
@@ -520,40 +566,77 @@ class _GraphPanelState extends State<GraphPanel> {
                   if (node.unreachable) const Chip(label: Text('inaccessible')),
                 ],
               ),
-              const SizedBox(height: 6),
-              if (out.isEmpty)
-                const Text('Aucune transition sortante.')
-              else
-                for (final e in out)
-                  _edgeRow(
-                    e.isLoop ? '↻ reste sur la page' : '→ ${e.to}',
-                    e,
-                    e.isLoop ? null : e.to,
-                  ),
-              if (widget.editing != null && !node.isProgram)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const Key('add-rule'),
-                    onPressed: () => _addRule(name),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Ajouter une transition'),
-                  ),
-                ),
-              if (inn.isNotEmpty) ...[
+              if (editing != null) ...[
                 const SizedBox(height: 6),
-                Text('Depuis :', style: theme.textTheme.labelMedium),
-                Wrap(
-                  spacing: 6,
-                  children: [
-                    for (final from in {for (final e in inn) e.from})
-                      ActionChip(
-                        visualDensity: VisualDensity.compact,
-                        label: Text(from),
-                        onPressed: () => _select(from, center: true),
-                      ),
+                SegmentedButton<_PageTab>(
+                  key: const Key('page-tabs'),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: _PageTab.overview,
+                      label: Text('Aperçu'),
+                    ),
+                    ButtonSegment(value: _PageTab.rules, label: Text('Règles')),
+                    ButtonSegment(value: _PageTab.input, label: Text('Saisie')),
+                    ButtonSegment(value: _PageTab.access, label: Text('Accès')),
                   ],
+                  selected: {tab},
+                  onSelectionChanged: (v) => setState(() => _tab = v.single),
                 ),
+              ],
+              const SizedBox(height: 6),
+              if (editing != null && tab == _PageTab.rules)
+                RulesForm(
+                  page: name,
+                  text: editing.text(),
+                  pages: graph.nodes.keys.toList(),
+                  apply: editing.apply,
+                  onRemove: (i, to) => _removeRuleAt(name, i, to),
+                  onAdd: node.isProgram ? null : () => _addRule(name),
+                  onGoToPage: widget.onGoToPage,
+                )
+              else if (editing != null && tab == _PageTab.input)
+                InputForm(
+                  page: name,
+                  text: editing.text(),
+                  apply: editing.apply,
+                  onGoToPage: widget.onGoToPage,
+                )
+              else if (editing != null && tab == _PageTab.access)
+                AccessForm(
+                  page: name,
+                  text: editing.text(),
+                  pages: graph.nodes.keys.toList(),
+                  apply: editing.apply,
+                )
+              else ...[
+                if (out.isEmpty)
+                  const Text('Aucune transition sortante.')
+                else
+                  for (final e in out)
+                    _edgeRow(
+                      e.isLoop ? '↻ reste sur la page' : '→ ${e.to}',
+                      e,
+                      e.isLoop ? null : e.to,
+                    ),
+                if (inn.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text('Depuis :', style: theme.textTheme.labelMedium),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      for (final from in {for (final e in inn) e.from})
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(from),
+                          onPressed: () => _select(from, center: true),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),
@@ -564,33 +647,14 @@ class _GraphPanelState extends State<GraphPanel> {
 
   Widget _edgeRow(String target, GraphEdge e, String? goTo) {
     final what = e.labels.join(', ');
-    final editable = widget.editing != null && e.rules.isNotEmpty;
-    final line = InkWell(
+    return InkWell(
       onTap: goTo == null ? null : () => _select(goTo, center: true),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Text(
-          editable
-              ? target
-              : '$target   $what${e.conditional ? '  (sous condition)' : ''}',
+          '$target   $what${e.conditional ? '  (sous condition)' : ''}',
         ),
       ),
-    );
-    if (!editable) return line;
-    return Wrap(
-      spacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        line,
-        for (final r in e.rules)
-          InputChip(
-            key: Key('rule-${e.from}-${r.index}'),
-            visualDensity: VisualDensity.compact,
-            label: Text('${r.label}${r.conditional ? ' (si)' : ''}'),
-            deleteButtonTooltipMessage: 'Supprimer cette règle',
-            onDeleted: () => _removeRule(e, r),
-          ),
-      ],
     );
   }
 }

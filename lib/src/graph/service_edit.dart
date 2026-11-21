@@ -458,3 +458,186 @@ String removeRule(String text, String from, int index, String to) {
     _removeItem(text, ['pages', from, 'action', 'saisies', index]),
   );
 }
+
+// --- Valeurs d'une page (formulaires) ---
+
+/// La valeur en [path] dans [text], ou `null` si elle n'existe pas. Tables et
+/// listes sont rendues telles que lues (`YamlMap`, `YamlList`).
+Object? valueAt(String text, List<Object> path) {
+  Object? node = loadYaml(text);
+  for (final key in path) {
+    if (node is YamlMap) {
+      node = node[key];
+    } else if (node is YamlList &&
+        key is int &&
+        key >= 0 &&
+        key < node.length) {
+      node = node[key];
+    } else {
+      return null;
+    }
+  }
+  return node;
+}
+
+/// Écrit [value] en [path] (une clé d'une table), en créant les tables qui
+/// manquent sur le chemin. Le reste du texte ne change pas.
+String setValue(String text, List<Object> path, Object value) {
+  _requireValid(text);
+  final e = YamlEditor(text);
+  // La première table du chemin qui n'existe pas : on y écrit tout le reste.
+  for (var i = 1; i < path.length; i++) {
+    if (valueAt(text, path.sublist(0, i + 1)) != null) continue;
+    Object nested = value;
+    for (var j = path.length - 1; j > i; j--) {
+      nested = {path[j]: nested};
+    }
+    e.update(path.sublist(0, i + 1), nested);
+    return _checked(e.toString());
+  }
+  e.update(path, value);
+  return _checked(e.toString());
+}
+
+/// Retire la clé en [path], et les tables que ça laisse vides (jusqu'à la page
+/// exclue). Sans effet si la clé n'existe pas.
+String removeValue(String text, List<Object> path) {
+  _requireValid(text);
+  if (valueAt(text, path) == null) return text;
+  var target = path;
+  while (target.length > 3) {
+    final parent = valueAt(text, target.sublist(0, target.length - 1));
+    if (parent is YamlMap && parent.length == 1) {
+      target = target.sublist(0, target.length - 1);
+    } else {
+      break;
+    }
+  }
+  final parent = valueAt(text, target.sublist(0, target.length - 1));
+  if (parent is YamlMap && parent.style == CollectionStyle.FLOW) {
+    final out = (YamlEditor(text)..remove(target)).toString();
+    return _checked(_tidyFlow(out, target.sublist(0, target.length - 1)));
+  }
+  return _checked(_cut(text, target, comments: false));
+}
+
+/// Retire l'espace que `yaml_edit` laisse après `{` quand on retire la
+/// première clé d'une table en ligne.
+String _tidyFlow(String text, List<Object> mapPath) {
+  final node = YamlEditor(text).parseAt(mapPath);
+  final span = node.span;
+  if (span.text.startsWith('{ ')) {
+    return text.replaceRange(span.start.offset + 1, span.start.offset + 2, '');
+  }
+  return text;
+}
+
+/// Déplace la règle [index] de la page [page] de [delta] places (-1 : plus
+/// tôt, +1 : plus tard) : l'ordre des règles compte (la première qui convient
+/// l'emporte).
+String moveRule(String text, String page, int index, int delta) {
+  final saisies = valueAt(text, ['pages', page, 'action', 'saisies']);
+  final to = index + delta;
+  if (saisies is! YamlList ||
+      index < 0 ||
+      index >= saisies.length ||
+      to < 0 ||
+      to >= saisies.length) {
+    throw EditException('Cette règle ne peut pas bouger.');
+  }
+  _requireValid(text);
+  // On échange les lignes des deux règles : seul le texte change de place.
+  final e = YamlEditor(text);
+  final a = e.parseAt(['pages', page, 'action', 'saisies', index]);
+  final b = e.parseAt(['pages', page, 'action', 'saisies', to]);
+  final first = a.span.start.offset < b.span.start.offset ? a : b;
+  final second = identical(first, a) ? b : a;
+  final firstText = first.span.text;
+  final secondText = second.span.text;
+  if (firstText.contains('\n') || secondText.contains('\n')) {
+    throw EditException(
+      'Cette règle s\'écrit sur plusieurs lignes : déplacez-la dans le texte.',
+    );
+  }
+  final out = text.replaceRange(
+    second.span.start.offset,
+    second.span.end.offset,
+    firstText,
+  );
+  return _checked(
+    out.replaceRange(
+      first.span.start.offset,
+      first.span.end.offset,
+      secondText,
+    ),
+  );
+}
+
+/// Qui peut ouvrir une page.
+enum AccessMode {
+  /// La page n'écrit pas d'`acces` : elle suit le défaut du service.
+  inherit,
+
+  /// `acces: {connecte: false}` : ouverte à tous, même si le défaut ferme.
+  open,
+
+  /// `acces: {connecte: true, ...}` : réservée aux utilisateurs connectés.
+  members,
+}
+
+/// Réécrit l'`acces` de la page [page] d'après [mode] et, pour [AccessMode.members],
+/// la page de renvoi [otherwise], le [message] et [provisional] (ouvert aux mots de
+/// passe provisoires). Les autres clés de la page ne changent pas.
+String setAccess(
+  String text,
+  String page, {
+  required AccessMode mode,
+  String? otherwise,
+  String? message,
+  bool provisional = false,
+}) {
+  final path = ['pages', page, 'acces'];
+  if (mode == AccessMode.inherit) return removeValue(text, path);
+  final value = {
+    'connecte': mode == AccessMode.members,
+    if (mode == AccessMode.members && otherwise != null) 'sinon': otherwise,
+    if (mode == AccessMode.members && message != null && message.isNotEmpty)
+      'message': message,
+    if (mode == AccessMode.members && provisional) 'mdp_provisoire': true,
+  };
+  return setValue(
+    text,
+    path,
+    wrapAsYamlNode(value, collectionStyle: CollectionStyle.FLOW),
+  );
+}
+
+/// Le mode d'accès écrit dans la page [page], et ses réglages.
+({AccessMode mode, String? otherwise, String? message, bool provisional})
+accessOf(String text, String page) {
+  final node = valueAt(text, ['pages', page, 'acces']);
+  if (node == null) {
+    return (
+      mode: AccessMode.inherit,
+      otherwise: null,
+      message: null,
+      provisional: false,
+    );
+  }
+  if (node is YamlMap) {
+    final members = node['connecte'] != false;
+    return (
+      mode: members ? AccessMode.members : AccessMode.open,
+      otherwise: node['sinon'] == null ? null : '${node['sinon']}',
+      message: node['message'] == null ? null : '${node['message']}',
+      provisional: node['mdp_provisoire'] == true,
+    );
+  }
+  // La forme courte `acces: connecte`.
+  return (
+    mode: AccessMode.members,
+    otherwise: null,
+    message: null,
+    provisional: false,
+  );
+}
