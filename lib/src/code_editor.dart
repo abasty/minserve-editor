@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 
 /// Taille, interligne et police du texte : la hauteur d'une ligne est fixe
 /// (`strut`), ce qui permet de numéroter les lignes et d'aller à une ligne.
-const _fontSize = 13.0;
+/// La hauteur d'une ligne doit être un nombre entier de pixels (14 × 1,5 = 21) :
+/// le navigateur arrondit sinon chaque ligne (19,5 → 20) et le surlignage
+/// calculé à partir de 19,5 dérive de plus en plus vers le haut.
+const _fontSize = 14.0;
 const _lineHeight = 1.5;
 const _lineExtent = _fontSize * _lineHeight;
 
@@ -160,6 +163,7 @@ class _CodeEditorState extends State<CodeEditor> {
                         SizedBox(
                           width: textWidth,
                           child: TextField(
+                            key: const Key('code'),
                             controller: widget.controller,
                             focusNode: _focus,
                             maxLines: null,

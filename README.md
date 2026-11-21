@@ -7,10 +7,12 @@ Un service Minserve est un fichier `service.yaml` : des pages, ce qu'elles affic
 l'on peut y saisir et où mène chaque saisie. Sur un service de taille réelle, on perd vite la
 vue d'ensemble. L'éditeur est là pour la retrouver.
 
-> **État : étape 2 du plan** (voir [documents/minserve-editor.md](documents/minserve-editor.md)).
-> L'application ouvre un `service.yaml`, le modifie dans un éditeur de texte à numéros de ligne,
-> le lit en direct avec le code du serveur (`minserve_core`) et affiche la première erreur ou
-> « service valide ». On l'enregistre par un téléchargement. Pas encore de graphe ni d'aperçu.
+> **État : étape 3 du plan** (voir [documents/minserve-editor.md](documents/minserve-editor.md)).
+> L'application ouvre un `service.yaml`, le modifie dans un éditeur de texte à numéros de ligne
+> et le lit en direct avec le code du serveur (`minserve_core`). À côté, le **graphe des pages**
+> (en lecture seule) : pages, transitions, impasses, pages inaccessibles, liens globaux,
+> recherche, et « Aller au texte » depuis une page. On enregistre par un téléchargement.
+> Le graphe ne modifie pas encore le YAML.
 
 ## Ce que l'éditeur doit faire
 

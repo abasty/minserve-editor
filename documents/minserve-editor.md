@@ -312,6 +312,13 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    graphique encore, mais déjà utile (la validation en ligne).
 3. **Le graphe en lecture** : nœuds, flèches, pages inaccessibles et impasses, recherche. Aucune
    modification, donc aucun risque pour le YAML.
+   *Faite.* Choix de réalisation : mise en page en colonnes de gauche à droite (distance au départ
+   en transitions), les pages que le départ n'atteint pas formant des bandes en dessous ; une
+   arête par couple de pages (plusieurs règles = plusieurs étiquettes) ; les étiquettes ne
+   s'affichent que sur les flèches de la page sélectionnée, les autres sont atténuées ; les
+   retours en arrière passent au-dessus et peuvent être masqués ; les liens globaux (raccourcis,
+   GUIDE, mot de passe à changer) sont des pastilles au-dessus du graphe ; si le texte devient
+   invalide, le graphe du dernier texte valide reste affiché, avec un bandeau.
 4. **Le graphe en écriture** (via `yaml_edit`) : créer, renommer, supprimer une page, ajouter et
    supprimer une règle. Tests : « ouvrir, modifier, enregistrer » sur l'exemple, avec
    comparaison du texte (seules les lignes visées changent).
