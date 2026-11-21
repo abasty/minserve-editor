@@ -322,6 +322,20 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
 4. **Le graphe en écriture** (via `yaml_edit`) : créer, renommer, supprimer une page, ajouter et
    supprimer une règle. Tests : « ouvrir, modifier, enregistrer » sur l'exemple, avec
    comparaison du texte (seules les lignes visées changent).
+   *Faite.* `yaml_edit` vérifié sur l'exemple de 1650 lignes : il conserve commentaires et
+   notation compacte `{…}`. Trois contournements, dans `lib/src/graph/service_edit.dart` :
+   (1) renommer une page passe par le texte de la clé (`yaml_edit` ne renomme pas) ;
+   (2) retirer une page ou une règle coupe les lignes dans le texte, avec les commentaires collés
+   au-dessus (hors premier élément d'une liste), car `yaml_edit` emporte aussi le commentaire qui
+   suit ; (3) donner une saisie à une page qui n'en a pas écrit les lignes à la suite de la page,
+   car `yaml_edit` range les clés nouvelles par ordre alphabétique et écrit mal une table en ligne
+   dans une table qu'il crée. Chaque modification vérifie le texte avant et après avec
+   `Service.parseString` : refusée avec la raison du serveur si le résultat serait invalide.
+   Une règle retirée est la dernière de sa page : la page perd aussi `entree` et `action` (le
+   serveur n'accepte pas de saisie sans règle), après confirmation. Supprimer une page retire
+   les règles qui y mènent, mais refuse tant qu'une valeur y renvoie (`debut`, `guide`,
+   `exec.suivant`, `acces.sinon`…) : le message dit laquelle. Pas encore : tirer une flèche à la
+   souris, changer la page de départ, éditer les transitions de programme (`exec.suivant`).
 5. **L'éditeur de page** en formulaires (saisie, règles, accès), avec repli en YAML.
 6. **Extraire `minterm_view`** de Minterm, puis **l'aperçu** d'une page.
 7. **L'aperçu d'un morceau**, les données de test, l'édition de l'`ecran` en liste
@@ -339,9 +353,9 @@ une fois `minterm_view` extrait.
 
 - **Dépôt** : `minserve-editor`, à part (§4.2).
 - **Hébergement** : GitHub Pages (§4.4).
-- **Édition du YAML en place** (`yaml_edit`, §3, approche B). À vérifier tout de même sur le
-  YAML de l'exemple avant l'étape 4 : `yaml_edit` conserve-t-il bien commentaires, notations
-  compactes et ancres sur 1600 lignes ? Sinon, repli sur l'édition du texte par plages de lignes.
+- **Édition du YAML en place** (`yaml_edit`, §3, approche B). Vérifié sur le
+  YAML de l'exemple à l'étape 4 : commentaires et notations compactes sont conservés ; trois
+  cas se font par le texte (voir l'étape 4).
 - **Mode de fichier** : ouvrir / enregistrer un fichier seul (§4.3). Dossier local et brouillon
   restent possibles plus tard.
 - **Mingets** : forme étendue de `macros:`, côté serveur (§7.1), plutôt qu'un fichier à côté.

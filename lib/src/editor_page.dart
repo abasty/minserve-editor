@@ -8,6 +8,7 @@ import 'file_access.dart';
 import 'graph/graph_panel.dart';
 import 'graph/layout.dart';
 import 'graph/page_lines.dart';
+import 'graph/service_edit.dart';
 import 'graph/service_graph.dart';
 import 'version.dart';
 
@@ -99,6 +100,30 @@ class _EditorPageState extends State<EditorPage> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _commands.goToLine(line),
     );
+  }
+
+  /// Modifie le texte à la demande du graphe. Rend faux, en disant pourquoi, si
+  /// la modification est refusée : le texte n'a alors pas changé.
+  bool _applyEdit(String Function(String text) edit) {
+    final String result;
+    try {
+      result = edit(_text.text);
+    } on EditException catch (e) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
+      return false;
+    }
+    // Le graphe suit tout de suite, sans attendre la fin d'une frappe.
+    _timer?.cancel();
+    _lastSeen = result;
+    final cursor = _text.selection.baseOffset.clamp(0, result.length);
+    _text.value = TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(offset: cursor),
+    );
+    setState(() => _setDiagnostics(result));
+    return true;
   }
 
   void _edited() {
@@ -273,6 +298,12 @@ class _EditorPageState extends State<EditorPage> {
                           graph: graph,
                           layout: _layout!,
                           onGoToPage: _goToPage,
+                          editing: _diagnostics.isValid
+                              ? GraphEditing(
+                                  text: () => _text.text,
+                                  apply: _applyEdit,
+                                )
+                              : null,
                           stale: _diagnostics.isValid ? null : _statusText(),
                         ),
                 ),

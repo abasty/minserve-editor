@@ -12,6 +12,17 @@ enum EdgeKind {
   access,
 }
 
+/// Une règle de `action` qui fait une transition : sa place dans la liste
+/// `saisies` de la page, et ce qui la déclenche.
+class GraphRule {
+  const GraphRule(this.index, this.label, {required this.conditional});
+
+  /// Place dans `action.saisies` (à partir de 0).
+  final int index;
+  final String label;
+  final bool conditional;
+}
+
 /// Une transition d'une page vers une autre. Plusieurs règles entre les mêmes
 /// deux pages ne font qu'une arête, avec plusieurs [labels].
 class GraphEdge {
@@ -23,6 +34,10 @@ class GraphEdge {
 
   /// Ce qui déclenche la transition, une entrée par règle (`1 · ENVOI`).
   final List<String> labels = [];
+
+  /// Les règles de la page qui la font, dans l'ordre du texte (vide pour les
+  /// transitions de programme ou d'accès).
+  final List<GraphRule> rules = [];
 
   /// Vrai si toutes les règles de l'arête ont une condition `si`.
   bool conditional = true;
@@ -103,6 +118,7 @@ class ServiceGraph {
       EdgeKind kind,
       String label, {
       bool conditional = false,
+      int? rule,
     }) {
       final edge = byKey.putIfAbsent((
         from,
@@ -110,17 +126,23 @@ class ServiceGraph {
         kind,
       ), () => GraphEdge(from, to, kind));
       if (!edge.labels.contains(label)) edge.labels.add(label);
+      if (rule != null) {
+        edge.rules.add(GraphRule(rule, label, conditional: conditional));
+      }
       if (!conditional) edge.conditional = false;
     }
 
     for (final page in service.pages.values) {
-      for (final choice in page.action?.choices ?? const <Choice>[]) {
+      final choices = page.action?.choices ?? const <Choice>[];
+      for (var i = 0; i < choices.length; i++) {
+        final choice = choices[i];
         add(
           page.name,
           choice.next,
           EdgeKind.rule,
           choiceLabel(choice),
           conditional: choice.condition != null,
+          rule: i,
         );
       }
       final next = page.exec?.next;

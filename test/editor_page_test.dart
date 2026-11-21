@@ -122,7 +122,144 @@ pages:
     ecran: [efface]
 ''';
 
+String codeText(WidgetTester tester) =>
+    tester.widget<TextField>(find.byKey(const Key('code'))).controller!.text;
+
+Future<void> loadTwo(WidgetTester tester) async {
+  await pumpEditor(tester, FakeFiles());
+  await tester.enterText(find.byKey(const Key('code')), _two);
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
+void editTests() {
+  testWidgets('créer une page depuis le graphe', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('add-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('page-name')), 'neuve');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), contains('  neuve:\n'));
+    expect(find.byKey(const Key('node-neuve')), findsOneWidget);
+    // La nouvelle page est sélectionnée.
+    expect(find.byKey(const Key('details')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('details')),
+        matching: find.text('neuve'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('un nom déjà pris est refusé dans le dialogue', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('add-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('page-name')), 'b');
+    await tester.pump();
+    expect(find.text('Une page porte déjà ce nom.'), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('dialog-ok'))).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('renommer une page change aussi les références', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('node-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('rename-page')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('page-name')), 'fin');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    final text = codeText(tester);
+    expect(text, contains('suivant: fin}'));
+    expect(text, contains('  fin:\n'));
+    expect(find.byKey(const Key('node-fin')), findsOneWidget);
+    expect(find.byKey(const Key('node-b')), findsNothing);
+  });
+
+  testWidgets('ajouter une transition', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('node-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('add-rule')));
+    await tester.pumpAndSettle();
+    // Par défaut : vers la première autre page (a), touche ENVOI.
+    await tester.enterText(find.byKey(const Key('rule-choice')), '7');
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(
+      codeText(tester),
+      contains('{choix: "7", touche: envoi, suivant: a}'),
+    );
+    // b n'est plus une impasse.
+    expect(find.byKey(const Key('dead-ends')), findsNothing);
+  });
+
+  testWidgets('supprimer une règle', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Supprimer cette règle'));
+    await tester.pumpAndSettle();
+    // C'est la seule règle de a : on le dit avant.
+    expect(find.textContaining('dernière règle'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), isNot(contains('suivant: b')));
+    expect(codeText(tester), isNot(contains('action:')));
+    expect(codeText(tester), contains('  b:'));
+    expect(find.byKey(const Key('unreachable')), findsOneWidget);
+  });
+
+  testWidgets('supprimer une page demande confirmation', (tester) async {
+    await loadTwo(tester);
+    await tester.tap(find.byKey(const Key('node-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('delete-page')));
+    await tester.pumpAndSettle();
+    expect(find.text('Supprimer « b » ?'), findsOneWidget);
+    expect(find.textContaining('la page a perd sa saisie'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), isNot(contains('  b:')));
+    expect(codeText(tester), isNot(contains('suivant: b')));
+    expect(find.byKey(const Key('node-b')), findsNothing);
+  });
+
+  testWidgets('une suppression refusée dit pourquoi et ne change rien', (
+    tester,
+  ) async {
+    await loadTwo(tester);
+    final before = codeText(tester);
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('delete-page')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('encore utilisée'), findsOneWidget);
+    expect(codeText(tester), before);
+  });
+
+  testWidgets('texte invalide : le graphe n\'est plus modifiable', (
+    tester,
+  ) async {
+    await loadTwo(tester);
+    await tester.enterText(
+      find.byKey(const Key('code')),
+      'debut: a\npages: 3\n',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('add-page')), findsNothing);
+  });
+}
+
 void graphTests() {
+  editTests();
   testWidgets('le graphe suit le texte et garde le dernier texte valide', (
     tester,
   ) async {

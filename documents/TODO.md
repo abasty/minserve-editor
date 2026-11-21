@@ -18,3 +18,11 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 - [ ] **Recherche et remplacement** dans le texte (Ctrl+F, Ctrl+H), avec saut au résultat suivant.
 - [ ] Autres : commentaire/décommentation de lignes (Ctrl+/), annuler/refaire fiable, repli des pages, mini-carte ou liste des pages (plan du document), correspondance des guillemets et crochets.
 - [ ] À trancher : continuer à écrire notre propre champ de texte (`code_editor.dart`, ligne de hauteur fixe) ou adopter un paquet d'édition de code. Contrainte : pas de ressource tierce chargée à l'exécution (voir doc §4.4).
+
+## Édition du graphe (suite de l'étape 4)
+
+- [ ] **Tirer une flèche** d'une page à l'autre à la souris pour créer une transition (aujourd'hui : bouton « Ajouter une transition »).
+- [ ] **Changer la page de départ** (`debut`) depuis le graphe.
+- [ ] **Transitions de programme et d'accès** (`exec.suivant`, `acces.sinon`) modifiables depuis le graphe ; aujourd'hui seulement les règles de `action`.
+- [ ] Changer la cible ou la touche d'une règle existante (aujourd'hui : la retirer et en ajouter une).
+- [ ] Annuler / refaire une modification du graphe (à vérifier : Ctrl+Z du champ de texte).

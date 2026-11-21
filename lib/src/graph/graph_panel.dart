@@ -2,8 +2,22 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'graph_dialogs.dart';
 import 'layout.dart';
+import 'service_edit.dart';
 import 'service_graph.dart';
+
+/// Ce que le graphe peut demander au texte du service.
+class GraphEditing {
+  const GraphEditing({required this.text, required this.apply});
+
+  /// Le texte actuel.
+  final String Function() text;
+
+  /// Remplace le texte par ce que [edit] en fait. Rend faux si la modification
+  /// est refusée (la raison est alors déjà montrée à l'utilisateur).
+  final bool Function(String Function(String text) edit) apply;
+}
 
 /// Le graphe des pages d'un service : une case par page, une flèche par
 /// transition. Toucher une page la sélectionne et met ses flèches en avant.
@@ -13,6 +27,7 @@ class GraphPanel extends StatefulWidget {
     required this.graph,
     required this.layout,
     this.onGoToPage,
+    this.editing,
     this.stale,
   });
 
@@ -21,6 +36,9 @@ class GraphPanel extends StatefulWidget {
 
   /// Demande d'aller à la déclaration de la page dans le texte.
   final void Function(String page)? onGoToPage;
+
+  /// De quoi modifier le service depuis le graphe ; `null` : lecture seule.
+  final GraphEditing? editing;
 
   /// Si le texte n'est plus valide : pourquoi ce graphe est celui d'avant.
   final String? stale;
@@ -39,6 +57,10 @@ class _GraphPanelState extends State<GraphPanel> {
   Set<String> _marked = {};
   String _markedBy = '';
 
+  /// Page à sélectionner dès qu'elle apparaît dans le graphe (créée ou
+  /// renommée depuis ici).
+  String? _pending;
+
   @override
   void dispose() {
     _view.dispose();
@@ -49,6 +71,14 @@ class _GraphPanelState extends State<GraphPanel> {
   @override
   void didUpdateWidget(GraphPanel old) {
     super.didUpdateWidget(old);
+    final pending = _pending;
+    if (pending != null && widget.graph.nodes.containsKey(pending)) {
+      _pending = null;
+      _selected = pending;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _center(pending);
+      });
+    }
     if (!widget.graph.nodes.containsKey(_selected)) _selected = null;
     _marked = _marked.intersection(widget.graph.nodes.keys.toSet());
   }
@@ -87,6 +117,105 @@ class _GraphPanelState extends State<GraphPanel> {
   void _select(String? name, {bool center = false}) {
     setState(() => _selected = name);
     if (center && name != null) _center(name);
+  }
+
+  // --- Modifications ---
+
+  Future<void> _addPage() async {
+    final editing = widget.editing!;
+    final name = await askPageName(
+      context,
+      title: 'Nouvelle page',
+      action: 'Créer',
+      existing: widget.graph.nodes.keys,
+    );
+    if (name == null) return;
+    if (editing.apply((t) => addPage(t, name))) _pending = name;
+  }
+
+  Future<void> _renamePage(String from) async {
+    final editing = widget.editing!;
+    final to = await askPageName(
+      context,
+      title: 'Renommer « $from »',
+      action: 'Renommer',
+      existing: widget.graph.nodes.keys,
+      initial: from,
+    );
+    if (to == null) return;
+    if (editing.apply((t) => renamePage(t, from, to))) _pending = to;
+  }
+
+  Future<void> _removePage(String name) async {
+    final editing = widget.editing!;
+    List<PageRef> refs;
+    try {
+      refs = pageReferences(
+        editing.text(),
+        name,
+      ).where((r) => !(r.path.length > 1 && r.path[1] == name)).toList();
+    } on EditException {
+      refs = const [];
+    }
+    final blocked = refs.any((r) => !r.removable);
+    // Si une valeur y renvoie, la modification dira laquelle, sans confirmer.
+    if (!blocked) {
+      final rules = refs.length;
+      List<String> lose;
+      try {
+        lose = pagesLosingInput(editing.text(), name);
+      } on EditException {
+        lose = const [];
+      }
+      final ok = await confirmDialog(
+        context,
+        title: 'Supprimer « $name » ?',
+        body: rules == 0
+            ? 'La page sera retirée du texte.'
+            : 'La page sera retirée du texte, ainsi que '
+                  '${rules == 1 ? 'la règle qui y mène' : '$rules règles qui y mènent'}'
+                  ' (${{for (final r in refs) r.where}.join(' ; ')}).'
+                  '${lose.isEmpty ? '' : ' Sans règle, ${lose.length == 1 ? 'la page ${lose.first} perd' : 'les pages ${lose.join(', ')} perdent'} sa saisie.'}',
+        action: 'Supprimer',
+      );
+      if (!ok || !mounted) return;
+    }
+    editing.apply((t) => removePage(t, name));
+  }
+
+  Future<void> _addRule(String from) async {
+    final editing = widget.editing!;
+    final spec = await askRule(
+      context,
+      from: from,
+      pages: widget.graph.nodes.keys.toList(),
+    );
+    if (spec == null) return;
+    editing.apply(
+      (t) => addRule(t, from, spec.to, key: spec.key, choice: spec.choice),
+    );
+  }
+
+  Future<void> _removeRule(GraphEdge e, GraphRule rule) async {
+    final editing = widget.editing!;
+    var only = false;
+    try {
+      only = isOnlyRule(editing.text(), e.from);
+    } on EditException {
+      only = false;
+    }
+    if (only) {
+      final ok = await confirmDialog(
+        context,
+        title: 'Supprimer la dernière règle de « ${e.from} » ?',
+        body:
+            'Une saisie ne peut pas rester sans règle : la page perd aussi sa '
+            'zone de saisie (entree et action).',
+        action: 'Supprimer',
+      );
+      if (!ok || !mounted) return;
+    }
+    editing.apply((t) => removeRule(t, e.from, rule.index, e.to));
   }
 
   void _mark(String by, List<String> names) {
@@ -237,6 +366,13 @@ class _GraphPanelState extends State<GraphPanel> {
               onSubmitted: _find,
             ),
           ),
+          if (widget.editing != null)
+            IconButton(
+              key: const Key('add-page'),
+              tooltip: 'Nouvelle page',
+              icon: const Icon(Icons.add_box_outlined),
+              onPressed: _addPage,
+            ),
           IconButton(
             tooltip: 'Tout voir',
             icon: const Icon(Icons.fit_screen),
@@ -346,6 +482,20 @@ class _GraphPanelState extends State<GraphPanel> {
                       icon: const Icon(Icons.code, size: 18),
                       label: const Text('Aller au texte'),
                     ),
+                  if (widget.editing != null) ...[
+                    IconButton(
+                      key: const Key('rename-page'),
+                      tooltip: 'Renommer la page',
+                      icon: const Icon(Icons.drive_file_rename_outline),
+                      onPressed: () => _renamePage(name),
+                    ),
+                    IconButton(
+                      key: const Key('delete-page'),
+                      tooltip: 'Supprimer la page',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _removePage(name),
+                    ),
+                  ],
                 ],
               ),
               Wrap(
@@ -380,6 +530,16 @@ class _GraphPanelState extends State<GraphPanel> {
                     e,
                     e.isLoop ? null : e.to,
                   ),
+              if (widget.editing != null && !node.isProgram)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('add-rule'),
+                    onPressed: () => _addRule(name),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Ajouter une transition'),
+                  ),
+                ),
               if (inn.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text('Depuis :', style: theme.textTheme.labelMedium),
@@ -404,14 +564,33 @@ class _GraphPanelState extends State<GraphPanel> {
 
   Widget _edgeRow(String target, GraphEdge e, String? goTo) {
     final what = e.labels.join(', ');
-    return InkWell(
+    final editable = widget.editing != null && e.rules.isNotEmpty;
+    final line = InkWell(
       onTap: goTo == null ? null : () => _select(goTo, center: true),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Text(
-          '$target   $what${e.conditional ? '  (sous condition)' : ''}',
+          editable
+              ? target
+              : '$target   $what${e.conditional ? '  (sous condition)' : ''}',
         ),
       ),
+    );
+    if (!editable) return line;
+    return Wrap(
+      spacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        line,
+        for (final r in e.rules)
+          InputChip(
+            key: Key('rule-${e.from}-${r.index}'),
+            visualDensity: VisualDensity.compact,
+            label: Text('${r.label}${r.conditional ? ' (si)' : ''}'),
+            deleteButtonTooltipMessage: 'Supprimer cette règle',
+            onDeleted: () => _removeRule(e, r),
+          ),
+      ],
     );
   }
 }
