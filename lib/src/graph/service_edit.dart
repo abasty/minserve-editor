@@ -949,3 +949,29 @@ String _flowScalar(Object value) {
       ? text
       : yamlString(text);
 }
+
+/// Une valeur lue par `loadYaml`, en listes et tables ordinaires.
+Object? _plain(Object? v) {
+  if (v is YamlMap) {
+    return {for (final e in v.entries) '${e.key}': _plain(e.value)};
+  }
+  if (v is YamlList) return [for (final e in v) _plain(e)];
+  return v;
+}
+
+/// Le texte du service où l'écran de [page] ne garde que les instructions de
+/// [from] à [to] (comprises), pour montrer un morceau de l'écran. Ce texte ne
+/// sert qu'à l'aperçu : il n'est jamais écrit dans le service.
+String screenSlice(String text, String page, int from, int to) {
+  final list = valueAt(text, ['pages', page, 'ecran']);
+  if (list is! YamlList) throw EditException('Cet écran n\'a pas de liste.');
+  if (from < 0 || to >= list.length || from > to) {
+    throw EditException('Ces instructions n\'existent pas.');
+  }
+  final e = YamlEditor(text)
+    ..update(
+      ['pages', page, 'ecran'],
+      [for (var i = from; i <= to; i++) _plain(list[i])],
+    );
+  return e.toString();
+}

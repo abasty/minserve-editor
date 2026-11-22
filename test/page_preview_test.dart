@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minserve_core/minserve_core.dart';
+import 'package:minserve_editor/src/graph/service_edit.dart';
 import 'package:minserve_editor/src/preview/page_preview.dart';
 import 'package:minterm_view/minterm_view.dart';
 
@@ -37,6 +38,28 @@ void main() {
     // La zone de saisie vide : trois points en ligne 24, colonne 1.
     expect(line(data.minitel, 24, length: 3), '...');
     expect(data.missing, ['absent.vdt']);
+  });
+
+  test('l\'aperçu d\'un morceau ne montre que ces instructions', () {
+    Service slice(int from, int to) =>
+        Service.parseString(screenSlice(_service, 'accueil', from, to));
+    // Jusqu'à l'instruction « ecrit » (4e) : le texte est à la ligne 3.
+    final upTo = slice(0, 2);
+    var data = renderPreview(upTo, upTo.pages['accueil']!);
+    expect(line(data.minitel, 3, from: 5, length: 7), 'Bonjour');
+    // Un morceau n'a pas la zone de saisie de la page (trois points, ligne 24).
+    expect(line(data.minitel, 24, length: 3), '...');
+    data = renderPreview(upTo, upTo.pages['accueil']!, inputZone: false);
+    expect(line(data.minitel, 24, length: 3), isNot('...'));
+    expect(line(data.minitel, 3, from: 5, length: 7), 'Bonjour');
+    // Avant l'écrit : rien à la ligne 3.
+    final before = slice(0, 1);
+    data = renderPreview(before, before.pages['accueil']!);
+    expect(line(data.minitel, 3, from: 5, length: 7), '       ');
+    // L'écrit seul n'est pas placé : il n'est pas à la ligne 3.
+    final only = slice(2, 2);
+    data = renderPreview(only, only.pages['accueil']!);
+    expect(line(data.minitel, 3, from: 5, length: 7), isNot('Bonjour'));
   });
 
   testWidgets('l\'onglet Rendu montre l\'écran de la page', (tester) async {

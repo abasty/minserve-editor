@@ -27,6 +27,7 @@ PagePreviewData renderPreview(
   ServicePage page, {
   Map<String, String> variables = const {},
   DateTime? now,
+  bool inputZone = true,
 }) {
   final missing = <String>[];
   Uint8List assets(String path) {
@@ -48,14 +49,29 @@ PagePreviewData renderPreview(
       init: service.initScreen,
     );
     minitel.emulate(init.takeBytes());
-    final rendered = renderPage(
-      page,
-      assets: assets,
-      now: time,
-      variables: variables,
-      init: service.initScreen,
-    );
-    minitel.emulate(rendered.bytes);
+    if (inputZone) {
+      final rendered = renderPage(
+        page,
+        assets: assets,
+        now: time,
+        variables: variables,
+        init: service.initScreen,
+      );
+      minitel.emulate(rendered.bytes);
+    } else {
+      // Un morceau de l'écran : ni zone de saisie ni curseur, rien que les
+      // instructions.
+      final w = VideotexWriter();
+      renderScreen(
+        page.screen,
+        w,
+        assets: assets,
+        now: time,
+        variables: variables,
+        init: service.initScreen,
+      );
+      minitel.emulate(w.takeBytes());
+    }
   } on Object catch (e) {
     error = e is ServiceException ? e.message : '$e';
   }
@@ -73,6 +89,9 @@ class PagePreview extends StatelessWidget {
     this.color = false,
     this.onColorChanged,
     this.variables = const {},
+    this.caption,
+    this.notice,
+    this.inputZone = true,
   });
 
   final Service service;
@@ -89,11 +108,25 @@ class PagePreview extends StatelessWidget {
   /// Les valeurs de test des variables `${nom}`.
   final Map<String, String> variables;
 
+  /// Ce qu'on montre, quand ce n'est pas toute la page (« Instruction 3 seule »).
+  final String? caption;
+
+  /// Montrer la zone de saisie de la page (faux pour un morceau de l'écran).
+  final bool inputZone;
+
+  /// Pourquoi l'aperçu demandé n'a pas pu être fait.
+  final String? notice;
+
   @override
   Widget build(BuildContext context) {
     final servicePage = service.pages[page];
     if (servicePage == null) return const SizedBox.shrink();
-    final data = renderPreview(service, servicePage, variables: variables);
+    final data = renderPreview(
+      service,
+      servicePage,
+      variables: variables,
+      inputZone: inputZone,
+    );
     final theme = Theme.of(context);
     final palette = color ? MinColors : MinGrey;
     final toggle = onColorChanged == null
@@ -112,6 +145,18 @@ class PagePreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (caption != null)
+          Text(
+            caption!,
+            key: const Key('preview-caption'),
+            style: theme.textTheme.labelLarge,
+          ),
+        if (notice != null)
+          Text(
+            notice!,
+            key: const Key('preview-notice'),
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
         if (data.error != null)
           Text(
             'Page non rendue : ${data.error}',

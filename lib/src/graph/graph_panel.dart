@@ -1,7 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:minserve_core/minserve_core.dart' show Service;
+import 'package:minserve_core/minserve_core.dart'
+    show Service, ServiceException;
 
 import '../split_handle.dart';
 import 'graph_dialogs.dart';
@@ -28,6 +29,9 @@ class GraphEditing {
 /// Le graphe des pages d'un service : une case par page, une flèche par
 /// transition. Toucher une page la sélectionne et met ses flèches en avant.
 enum _PageTab { overview, rules, input, access, screen, preview }
+
+/// Ce que montre l'aperçu d'une page quand une instruction est choisie.
+enum _Scope { page, upTo, only }
 
 class GraphPanel extends StatefulWidget {
   const GraphPanel({
@@ -76,6 +80,11 @@ class _GraphPanelState extends State<GraphPanel> {
 
   /// Le panneau des données de test est ouvert ; leurs valeurs (variables).
   bool _dataOpen = false;
+
+  /// L'instruction choisie dans l'onglet Écran, et ce que l'aperçu en montre :
+  /// la page entière, l'écran jusqu'à elle, ou elle seule.
+  int? _instr;
+  _Scope _scope = _Scope.page;
   final Map<String, String> _testVars = {};
 
   /// Le dernier clic sur un nœud, pour reconnaître le double clic sans
@@ -157,7 +166,10 @@ class _GraphPanelState extends State<GraphPanel> {
   void _select(String? name, {bool center = false}) {
     setState(() {
       _selected = name;
-      if (_open != null && name != null) _open = name;
+      if (_open != null && name != null && name != _open) {
+        _open = name;
+        _instr = null;
+      }
     });
     if (center && name != null && _open == null) _center(name);
   }
@@ -165,6 +177,7 @@ class _GraphPanelState extends State<GraphPanel> {
   void _openPage(String name) => setState(() {
     _selected = name;
     _open = name;
+    _instr = null;
   });
 
   /// Revient au graphe, centré sur la page qu'on quitte.
@@ -359,15 +372,7 @@ class _GraphPanelState extends State<GraphPanel> {
           Expanded(
             child: Row(
               children: [
-                Expanded(
-                  child: PagePreview(
-                    service: widget.service!,
-                    page: open,
-                    large: true,
-                    color: _previewColor,
-                    variables: _testVars,
-                  ),
-                ),
+                Expanded(child: _preview(open)),
                 if (_dataOpen) _testPanel(open),
               ],
             ),
@@ -435,6 +440,57 @@ class _GraphPanelState extends State<GraphPanel> {
     );
   }
 
+  /// L'aperçu de la page [name], ou d'un morceau de son écran si une instruction
+  /// est choisie dans l'onglet Écran.
+  Widget _preview(String name) {
+    final service = widget.service!;
+    final text = widget.editing?.text();
+    final at = _instrIn(name);
+    var shown = service;
+    String? caption;
+    String? notice;
+    final partial =
+        _tab == _PageTab.screen &&
+        _scope != _Scope.page &&
+        at != null &&
+        text != null;
+    if (partial) {
+      final from = _scope == _Scope.only ? at : 0;
+      try {
+        shown = Service.parseString(screenSlice(text, name, from, at));
+        caption = _scope == _Scope.only
+            ? 'Instruction ${at + 1} seule'
+            : 'Instructions 1 à ${at + 1}';
+      } on Object catch (e) {
+        notice =
+            'Aperçu de ce morceau impossible : '
+            '${e is ServiceException ? e.message : e}';
+      }
+    }
+    return PagePreview(
+      service: shown,
+      page: name,
+      large: true,
+      color: _previewColor,
+      variables: _testVars,
+      caption: caption,
+      notice: notice,
+      inputZone: caption == null,
+    );
+  }
+
+  /// L'instruction choisie, si elle existe encore dans la page [name].
+  int? _instrIn(String name) {
+    final at = _instr;
+    final text = widget.editing?.text();
+    final count = text == null ? 0 : screenItems(text, name).length;
+    return at != null && at < count ? at : null;
+  }
+
+  void _selectInstruction(int i) {
+    if (i != _instr) setState(() => _instr = i);
+  }
+
   Widget _testPanel(String page) {
     final text = widget.editing?.text();
     final names = text == null
@@ -462,14 +518,49 @@ class _GraphPanelState extends State<GraphPanel> {
       padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
       child: Row(
         children: [
-          TextButton.icon(
-            key: const Key('back-to-graph'),
-            onPressed: _closePage,
-            icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('Graphe'),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton.icon(
+                  key: const Key('back-to-graph'),
+                  onPressed: _closePage,
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Graphe'),
+                ),
+                Text(
+                  'Page « $name »',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                if (_tab == _PageTab.screen && _instrIn(name) != null)
+                  SegmentedButton<_Scope>(
+                    key: const Key('preview-scope'),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    segments: [
+                      const ButtonSegment(
+                        value: _Scope.page,
+                        label: Text('Page'),
+                      ),
+                      ButtonSegment(
+                        value: _Scope.upTo,
+                        label: Text('Jusqu\'à ${_instr! + 1}'),
+                      ),
+                      ButtonSegment(
+                        value: _Scope.only,
+                        label: Text('${_instr! + 1} seule'),
+                      ),
+                    ],
+                    selected: {_scope},
+                    onSelectionChanged: (v) =>
+                        setState(() => _scope = v.single),
+                  ),
+              ],
+            ),
           ),
-          Text('Page « $name »', style: Theme.of(context).textTheme.titleSmall),
-          const Spacer(),
           IconButton(
             key: const Key('test-data-toggle'),
             tooltip: 'Données de test (variables)',
@@ -798,6 +889,8 @@ class _GraphPanelState extends State<GraphPanel> {
                   text: editing.text(),
                   apply: editing.apply,
                   onGoToPage: widget.onGoToPage,
+                  selected: pageMode ? _instr : null,
+                  onSelect: pageMode ? _selectInstruction : null,
                 )
               else if (tab == _PageTab.preview && widget.service != null)
                 PagePreview(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:minserve_editor/src/preview/page_preview.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:minserve_editor/src/graph/screen_form.dart';
@@ -260,5 +261,57 @@ void main() {
     expect(cur.first, 'curseur');
     expect(cur, contains('position'));
     expect(matchingInstructions('zzz'), isEmpty);
+  });
+
+  testWidgets('écran : l\'aperçu d\'un morceau', (tester) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), _service);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pumpAndSettle();
+    final tab = find.descendant(
+      of: find.byKey(const Key('page-tabs')),
+      matching: find.text('Écran'),
+    );
+    await tester.ensureVisible(tab);
+    await tester.tap(tab);
+    await tester.pumpAndSettle();
+    // Sans instruction choisie : pas de choix de portée.
+    expect(find.byKey(const Key('preview-scope')), findsNothing);
+    expect(find.byKey(const Key('preview-caption')), findsNothing);
+    final row = find.byKey(const Key('screen-row-2'));
+    await tester.ensureVisible(row);
+    await tester.tap(find.byKey(const Key('screen-a-2-ecrit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('preview-scope')), findsOneWidget);
+    // Jusqu'à la 3e instruction, puis elle seule.
+    await tester.tap(find.text('Jusqu\'à 3'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('preview-caption'))).data,
+      'Instructions 1 à 3',
+    );
+    expect(
+      tester.widget<PagePreview>(find.byType(PagePreview)).inputZone,
+      false,
+    );
+    await tester.tap(find.text('3 seule'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('preview-caption'))).data,
+      'Instruction 3 seule',
+    );
+    // Le vrai texte n'a pas changé.
+    expect(codeText(tester), contains('- efface\n      - position'));
+    // Revenir à la page entière.
+    await tester.tap(find.text('Page').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('preview-caption')), findsNothing);
+    expect(
+      tester.widget<PagePreview>(find.byType(PagePreview)).inputZone,
+      true,
+    );
   });
 }

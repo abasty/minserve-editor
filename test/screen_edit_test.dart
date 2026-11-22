@@ -186,4 +186,56 @@ void main() {
       throwsA(isA<EditException>()),
     );
   });
+
+  test('un morceau de l\'écran, pour l\'aperçu', () {
+    final slice = screenSlice(_service, 'accueil', 1, 2);
+    final service = Service.parseString(slice);
+    expect(service.pages['accueil']!.screen.length, 2);
+    // Un bloc si entier, avec ses sous-instructions.
+    final block = Service.parseString(screenSlice(_service, 'accueil', 3, 3));
+    expect(block.pages['accueil']!.screen.length, 1);
+    // Le vrai texte n'a pas changé, et les bornes sont vérifiées.
+    expect(names(_service).length, 5);
+    expect(
+      () => screenSlice(_service, 'accueil', 2, 9),
+      throwsA(isA<EditException>()),
+    );
+  });
+
+  test('l\'aperçu d\'un appel de macro et d\'un fois', () {
+    const text = r'''
+debut: a
+macros:
+  trait:
+    - position: {ligne: $1, col: 1}
+    - repete: {caractere: "-", nombre: 10}
+pages:
+  a:
+    ecran:
+      - efface
+      - macro: [trait, 5]
+      - fois:
+          nombre: 3
+          ecran:
+            - ecrit: "x"
+''';
+    for (final i in [1, 2]) {
+      final slice = Service.parseString(screenSlice(text, 'a', i, i));
+      expect(slice.pages['a']!.screen, isNotEmpty);
+    }
+    expect(
+      Service.parseString(screenSlice(text, 'a', 1, 1))
+          .pages['a']!
+          .screen
+          .length,
+      2,
+    );
+    expect(
+      Service.parseString(screenSlice(text, 'a', 2, 2))
+          .pages['a']!
+          .screen
+          .length,
+      3,
+    );
+  });
 }

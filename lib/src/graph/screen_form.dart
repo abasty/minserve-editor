@@ -51,12 +51,19 @@ class ScreenForm extends StatefulWidget {
     required this.text,
     required this.apply,
     this.onGoToPage,
+    this.selected,
+    this.onSelect,
   });
 
   final String page;
   final String text;
   final ApplyEdit apply;
   final void Function(String page, {String? section, int? rule})? onGoToPage;
+
+  /// L'instruction choisie (dont l'aperçu peut montrer le morceau), et ce qui
+  /// se passe quand on en choisit une autre.
+  final int? selected;
+  final ValueChanged<int>? onSelect;
 
   @override
   State<ScreenForm> createState() => _ScreenFormState();
@@ -97,93 +104,108 @@ class _ScreenFormState extends State<ScreenForm> {
             child: Text('Cet écran est vide.'),
           ),
         for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 26,
-                  child: Text(
-                    '${item.index + 1}',
-                    textAlign: TextAlign.right,
-                    style: theme.textTheme.bodySmall,
+          Listener(
+            key: Key('screen-row-${item.index}'),
+            // Toucher une ligne la choisit, sans gêner ses champs.
+            onPointerDown: (_) => widget.onSelect?.call(item.index),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                color: item.index == widget.selected
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 26,
+                    child: Text(
+                      '${item.index + 1}',
+                      textAlign: TextAlign.right,
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: item.multiline
-                      ? _block(context, item)
-                      : (_asText.contains(item.index) ? null : _fields(item)) ??
-                            CommitField(
-                              key: Key('screen-$page-${item.index}'),
-                              width: double.infinity,
-                              value: item.text,
-                              onCommit: (v) => apply(
-                                (t) =>
-                                    replaceScreenItem(t, page, item.index, v),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: item.multiline
+                        ? _block(context, item)
+                        : (_asText.contains(item.index)
+                                  ? null
+                                  : _fields(item)) ??
+                              CommitField(
+                                key: Key('screen-$page-${item.index}'),
+                                width: double.infinity,
+                                value: item.text,
+                                onCommit: (v) => apply(
+                                  (t) =>
+                                      replaceScreenItem(t, page, item.index, v),
+                                ),
                               ),
-                            ),
-                ),
-                if (!item.multiline && _fields(item) != null)
+                  ),
+                  if (!item.multiline && _fields(item) != null)
+                    IconButton(
+                      key: Key('screen-mode-${item.index}'),
+                      tooltip: _asText.contains(item.index)
+                          ? 'Montrer les champs'
+                          : 'Écrire en texte',
+                      visualDensity: VisualDensity.compact,
+                      isSelected: _asText.contains(item.index),
+                      icon: const Icon(Icons.code, size: 18),
+                      onPressed: () => setState(() {
+                        if (!_asText.remove(item.index)) {
+                          _asText.add(item.index);
+                        }
+                      }),
+                    ),
                   IconButton(
-                    key: Key('screen-mode-${item.index}'),
-                    tooltip: _asText.contains(item.index)
-                        ? 'Montrer les champs'
-                        : 'Écrire en texte',
+                    key: Key('screen-up-${item.index}'),
+                    tooltip: 'Monter',
                     visualDensity: VisualDensity.compact,
-                    isSelected: _asText.contains(item.index),
-                    icon: const Icon(Icons.code, size: 18),
-                    onPressed: () => setState(() {
-                      if (!_asText.remove(item.index)) _asText.add(item.index);
-                    }),
+                    icon: const Icon(Icons.arrow_upward, size: 18),
+                    onPressed: item.index == 0
+                        ? null
+                        : () => apply(
+                            (t) => moveScreenItem(t, page, item.index, -1),
+                          ),
                   ),
-                IconButton(
-                  key: Key('screen-up-${item.index}'),
-                  tooltip: 'Monter',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.arrow_upward, size: 18),
-                  onPressed: item.index == 0
-                      ? null
-                      : () => apply(
-                          (t) => moveScreenItem(t, page, item.index, -1),
-                        ),
-                ),
-                IconButton(
-                  key: Key('screen-down-${item.index}'),
-                  tooltip: 'Descendre',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.arrow_downward, size: 18),
-                  onPressed: item.index == items.length - 1
-                      ? null
-                      : () => apply(
-                          (t) => moveScreenItem(t, page, item.index, 1),
-                        ),
-                ),
-                IconButton(
-                  key: Key('screen-copy-${item.index}'),
-                  tooltip: 'Dupliquer',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.content_copy, size: 18),
-                  onPressed: () =>
-                      apply((t) => duplicateScreenItem(t, page, item.index)),
-                ),
-                _insert(
-                  context,
-                  item.index + 1,
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(Icons.add, size: 18),
+                  IconButton(
+                    key: Key('screen-down-${item.index}'),
+                    tooltip: 'Descendre',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.arrow_downward, size: 18),
+                    onPressed: item.index == items.length - 1
+                        ? null
+                        : () => apply(
+                            (t) => moveScreenItem(t, page, item.index, 1),
+                          ),
                   ),
-                ),
-                IconButton(
-                  key: Key('screen-delete-${item.index}'),
-                  tooltip: 'Supprimer',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  onPressed: () =>
-                      apply((t) => removeScreenItem(t, page, item.index)),
-                ),
-              ],
+                  IconButton(
+                    key: Key('screen-copy-${item.index}'),
+                    tooltip: 'Dupliquer',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.content_copy, size: 18),
+                    onPressed: () =>
+                        apply((t) => duplicateScreenItem(t, page, item.index)),
+                  ),
+                  _insert(
+                    context,
+                    item.index + 1,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.add, size: 18),
+                    ),
+                  ),
+                  IconButton(
+                    key: Key('screen-delete-${item.index}'),
+                    tooltip: 'Supprimer',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    onPressed: () =>
+                        apply((t) => removeScreenItem(t, page, item.index)),
+                  ),
+                ],
+              ),
             ),
           ),
         _insert(

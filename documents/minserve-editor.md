@@ -390,7 +390,15 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      vide pas, et le serveur refuse les valeurs hors limites. Un bouton « </> » bascule une ligne en
      texte libre ; `macro`, `octets`, `si` et `fois` restent en texte. Reste : les macros dans le menu
      d'ajout, `si` et `fois`.
-   - 7c — L'aperçu d'un morceau (macro avec arguments de test, bloc `fois`).
+   - **7c — L'aperçu d'un morceau (faite)** : dans l'onglet « Écran » du mode page, toucher une ligne
+     la choisit, et un sélecteur en haut propose **Page** / **Jusqu'à n** (l'écran des instructions 1 à n) /
+     **n seule**. Le morceau est rendu par le vrai code du serveur : l'éditeur fabrique un texte de service
+     où l'`ecran` de la page ne garde que ces instructions (`screenSlice`), le fait lire par
+     `Service.parseString` et le rend ; le texte réel n'est jamais touché. Un appel de macro (avec ses
+     arguments), un bloc `fois` ou `si` se montrent donc comme n'importe quelle instruction. Un morceau que le
+     serveur refuserait (par exemple un `si` coupé) s'explique sous l'écran. Une macro qu'aucune page
+     n'appelle ne se montre pas encore : elle viendra avec les mingets (étape 8, formulaire d'appel avec
+     arguments de test).
 8. **Les mingets** : forme étendue côté serveur, palette, formulaire d'appel, extraction,
    bibliothèque.
 9. **Édition directe sur l'aperçu** (§5.3).
