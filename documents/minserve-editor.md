@@ -415,7 +415,13 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      (`removeMacro` : refusée tant qu'une page ou une macro l'appelle, avec la liste des appelants ; la
      dernière macro retirée emporte la clé `macros`). Chaque opération est validée avant et après par le serveur
      et se défait avec Ctrl+Z.
-   - 8c — Insérer un minget dans une page, avec un formulaire d'appel.
+   - **8c — Insérer un minget dans une page (faite)** : le sélecteur d'instruction liste aussi les macros du
+     service (« macro nom — description » ; on tape `tra` pour `trait`). Un minget sans paramètre s'insère
+     tout de suite ; sinon un formulaire d'appel (`macro_call.dart`) propose un champ par paramètre avec sa
+     valeur par défaut, refuse d'avance ce que le serveur refuserait (type, bornes) et écrit
+     `- macro: [nom, args...]` en **omettant les derniers arguments qui valent le défaut** (`macroCallText`).
+     Un appel déjà écrit se montre dans l'onglet Écran avec son nom et un champ par paramètre (les omis avec leur
+     valeur par défaut) ; modifier un champ réécrit l'appel, raccourci si possible.
    - 8d — Extraire des instructions en minget, mettre à jour les usages.
    - 8e — La bibliothèque de mingets.
 9. **Édition directe sur l'aperçu** (§5.3).

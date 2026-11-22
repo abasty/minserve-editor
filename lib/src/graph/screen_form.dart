@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:minserve_core/minserve_core.dart' show yamlString;
+import 'package:minserve_core/minserve_core.dart'
+    show MacroDefinition, MacroType, yamlString;
 import 'package:yaml/yaml.dart';
 
 import 'color_pick.dart';
+import 'macro_call.dart';
+import 'minget_panel.dart' show mingetParamTypes;
 import 'page_forms.dart';
 import 'service_edit.dart';
 
@@ -53,6 +56,7 @@ class ScreenForm extends StatefulWidget {
     this.onGoToPage,
     this.selected,
     this.onSelect,
+    this.macros = const {},
   });
 
   final String page;
@@ -64,6 +68,10 @@ class ScreenForm extends StatefulWidget {
   /// se passe quand on en choisit une autre.
   final int? selected;
   final ValueChanged<int>? onSelect;
+
+  /// Les macros du service : on peut les insérer, et leurs appels se montrent
+  /// avec un champ par paramètre.
+  final Map<String, MacroDefinition> macros;
 
   @override
   State<ScreenForm> createState() => _ScreenFormState();
@@ -84,8 +92,20 @@ class _ScreenFormState extends State<ScreenForm> {
       key: Key('screen-add-$at'),
       borderRadius: BorderRadius.circular(6),
       onTap: () async {
-        final item = await askInstruction(context);
-        if (item != null) apply((t) => insertScreenItem(t, page, at, item));
+        final picked = await askInstruction(context, macros: widget.macros);
+        if (picked == null || !context.mounted) return;
+        var item = picked.text;
+        final macro = picked.macro;
+        if (macro != null) {
+          // Un minget sans paramètre s'insère tout de suite ; sinon on demande
+          // ses arguments.
+          final args = macro.arity == 0
+              ? <Object?>[]
+              : await askMacroCall(context, macro);
+          if (args == null) return;
+          item = macroCallText(macro, args);
+        }
+        if (item != null) apply((t) => insertScreenItem(t, page, at, item!));
       },
       child: Tooltip(message: 'Insérer une instruction', child: child),
     );
@@ -354,6 +374,10 @@ extension on _ScreenFormState {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [label, ...children],
     );
+    if (name == 'macro') {
+      final fields = _macroFields(item);
+      return fields == null ? null : row(fields);
+    }
     if (_bare.contains(name) && value is String) return row(const []);
     final choices = _choices[name];
     if (choices != null && value is YamlMap && value.length == 1) {
@@ -402,6 +426,61 @@ extension on _ScreenFormState {
     return null;
   }
 
+  /// Les champs d'un appel de macro : son nom puis un champ par paramètre, avec
+  /// la valeur par défaut pour ceux que l'appel omet. `null` si la macro est
+  /// inconnue ou l'appel écrit autrement.
+  List<Widget>? _macroFields(ScreenItem item) {
+    final call = readMacroCall(item.text);
+    final macro = call == null ? null : widget.macros[call.name];
+    if (call == null || macro == null) return null;
+    final args = fullMacroArgs(macro, call.args);
+    final types = mingetParamTypes(macro);
+    bool write(int i, Object? v) {
+      final next = [...args];
+      next[i] = v;
+      return apply(
+        (t) =>
+            replaceScreenItem(t, page, item.index, macroCallText(macro, next)),
+      );
+    }
+
+    return [
+      Tooltip(
+        message: macro.description ?? 'Minget du service',
+        child: Chip(
+          key: Key('screen-$page-${item.index}-macro-name'),
+          label: Text(macro.name),
+          visualDensity: VisualDensity.compact,
+          avatar: const Icon(Icons.widgets_outlined, size: 14),
+        ),
+      ),
+      for (var i = 0; i < macro.arity; i++)
+        if (types[i] == MacroType.booleen)
+          SizedBox(
+            width: 150,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(macro.parameters[i].name),
+                Switch(
+                  key: Key('screen-$page-${item.index}-arg-$i'),
+                  value: args[i] == true,
+                  onChanged: (v) => write(i, v),
+                ),
+              ],
+            ),
+          )
+        else
+          CommitField(
+            key: Key('screen-$page-${item.index}-arg-$i'),
+            width: 96,
+            label: macro.parameters[i].name,
+            value: '${args[i]}',
+            onCommit: (v) => write(i, parseMacroArg(types[i], v)),
+          ),
+    ];
+  }
+
   Widget _param(ScreenItem item, String name, YamlMap map, _Param p) {
     final key = Key('screen-$page-${item.index}-${p.key}');
     final current = map[p.key] == null ? '' : '${map[p.key]}';
@@ -436,10 +515,45 @@ extension on _ScreenFormState {
 /// Demande l'instruction à ajouter : on tape les premières lettres de son nom,
 /// la liste se réduit, Entrée prend la première, ou on clique. Rend le texte de
 /// l'instruction avec ses valeurs par défaut, ou `null` si on annule.
-Future<String?> askInstruction(BuildContext context) => showDialog<String>(
+Future<PickedInstruction?> askInstruction(
+  BuildContext context, {
+  Map<String, MacroDefinition> macros = const {},
+}) => showDialog<PickedInstruction>(
   context: context,
-  builder: (context) => const _InstructionDialog(),
+  builder: (context) => _InstructionDialog(macros),
 );
+
+/// L'instruction choisie : son texte (avec ses valeurs par défaut), ou un
+/// minget dont il faut encore demander les arguments.
+class PickedInstruction {
+  const PickedInstruction.text(String this.text) : macro = null;
+  const PickedInstruction.macro(MacroDefinition this.macro) : text = null;
+
+  final String? text;
+  final MacroDefinition? macro;
+}
+
+/// Les macros de [macros] qui conviennent à [query] : celles dont le nom
+/// commence par la saisie d'abord, puis celles dont le nom ou la description la
+/// contiennent. Sans saisie, toutes.
+List<MacroDefinition> matchingMacros(
+  Map<String, MacroDefinition> macros,
+  String query,
+) {
+  final q = query.trim().toLowerCase();
+  final all = macros.values.toList();
+  if (q.isEmpty) return all;
+  return [
+    for (final m in all)
+      if (m.name.toLowerCase().startsWith(q)) m,
+    for (final m in all)
+      if (!m.name.toLowerCase().startsWith(q) &&
+          ('${m.name} macro minget ${m.description ?? ''}')
+              .toLowerCase()
+              .contains(q))
+        m,
+  ];
+}
 
 /// Les instructions de [screenPalette] qui conviennent à [query] : celles dont le
 /// nom commence par la saisie d'abord, puis celles dont le nom ou la description
@@ -457,7 +571,9 @@ List<(String, String)> matchingInstructions(String query) {
 }
 
 class _InstructionDialog extends StatefulWidget {
-  const _InstructionDialog();
+  const _InstructionDialog(this.macros);
+
+  final Map<String, MacroDefinition> macros;
 
   @override
   State<_InstructionDialog> createState() => _InstructionDialogState();
@@ -473,7 +589,21 @@ class _InstructionDialogState extends State<_InstructionDialog> {
     super.dispose();
   }
 
-  List<(String, String)> get _matches => matchingInstructions(_query.text);
+  /// Les entrées de la liste : les instructions, puis les mingets du service.
+  List<({String label, String key, PickedInstruction pick})> get _matches => [
+    for (final (label, item) in matchingInstructions(_query.text))
+      (
+        label: label,
+        key: 'instruction-${label.split(' — ').first}',
+        pick: PickedInstruction.text(item),
+      ),
+    for (final m in matchingMacros(widget.macros, _query.text))
+      (
+        label: 'macro ${m.name} — ${m.description ?? 'minget du service'}',
+        key: 'instruction-macro-${m.name}',
+        pick: PickedInstruction.macro(m),
+      ),
+  ];
 
   void _move(int delta) {
     final n = _matches.length;
@@ -482,7 +612,7 @@ class _InstructionDialogState extends State<_InstructionDialog> {
 
   void _pick(int i) {
     final matches = _matches;
-    if (i >= 0 && i < matches.length) Navigator.pop(context, matches[i].$2);
+    if (i >= 0 && i < matches.length) Navigator.pop(context, matches[i].pick);
   }
 
   @override
@@ -536,14 +666,12 @@ class _InstructionDialogState extends State<_InstructionDialog> {
                         children: [
                           for (var i = 0; i < matches.length; i++)
                             ListTile(
-                              key: Key(
-                                'instruction-${matches[i].$1.split(' — ').first}',
-                              ),
+                              key: Key(matches[i].key),
                               dense: true,
                               selected: i == _chosen,
                               selectedTileColor: scheme.primaryContainer,
                               selectedColor: scheme.onPrimaryContainer,
-                              title: Text(matches[i].$1),
+                              title: Text(matches[i].label),
                               onTap: () => _pick(i),
                             ),
                         ],

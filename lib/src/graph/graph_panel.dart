@@ -919,6 +919,7 @@ class _GraphPanelState extends State<GraphPanel> {
                   onGoToPage: widget.onGoToPage,
                   selected: pageMode ? _instr : null,
                   onSelect: pageMode ? _selectInstruction : null,
+                  macros: widget.service?.macros ?? const {},
                 )
               else if (tab == _PageTab.preview && widget.service != null)
                 PagePreview(
