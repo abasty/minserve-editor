@@ -9,6 +9,9 @@ Future<String?> askPageName(
   required String action,
   required Iterable<String> existing,
   String initial = '',
+  String label = 'Nom de la page',
+  bool allowInitial = false,
+  String? Function(String name, Iterable<String> existing)? check,
 }) {
   return showDialog<String>(
     context: context,
@@ -17,6 +20,9 @@ Future<String?> askPageName(
       action: action,
       existing: existing,
       initial: initial,
+      label: label,
+      allowInitial: allowInitial,
+      check: check ?? pageNameError,
     ),
   );
 }
@@ -27,8 +33,16 @@ class _NameDialog extends StatefulWidget {
     required this.action,
     required this.existing,
     required this.initial,
+    required this.label,
+    required this.allowInitial,
+    required this.check,
   });
 
+  final String label;
+
+  /// Accepter le nom proposé tel quel (une copie : le nom est une suggestion).
+  final bool allowInitial;
+  final String? Function(String name, Iterable<String> existing) check;
   final String title;
   final String action;
   final Iterable<String> existing;
@@ -49,11 +63,13 @@ class _NameDialogState extends State<_NameDialog> {
 
   String? get _error {
     final text = _name.text.trim();
-    if (text == widget.initial) return null;
-    return pageNameError(text, widget.existing);
+    if (text == widget.initial && !widget.allowInitial) return null;
+    return widget.check(text, widget.existing);
   }
 
-  bool get _ok => _name.text.trim() != widget.initial && _error == null;
+  bool get _ok =>
+      (widget.allowInitial || _name.text.trim() != widget.initial) &&
+      _error == null;
 
   void _submit() {
     if (_ok) Navigator.pop(context, _name.text.trim());
@@ -69,7 +85,7 @@ class _NameDialogState extends State<_NameDialog> {
         controller: _name,
         autofocus: true,
         decoration: InputDecoration(
-          labelText: 'Nom de la page',
+          labelText: widget.label,
           errorText: showError,
         ),
         onChanged: (_) => setState(() {}),

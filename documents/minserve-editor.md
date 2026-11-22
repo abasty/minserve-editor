@@ -409,6 +409,12 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      appelle la macro (`mingetPreviewText`), relue par le vrai serveur : un appel refusé s'explique à la place de
      l'écran. Pour une macro écrite en liste d'instructions, le type de chaque `$n` est deviné d'après le corps
      (`ligne: $1` : entier ; `ecrit: "$3"` ou `longueur($4)` : texte). « Dans le texte » va à la définition.
+   - **8b-2 — Gérer les mingets (faite)** : dans le panneau, **renommer** (la clé et tous les appels, dans les
+     pages, les blocs `si` et `fois`, `init` et le corps des autres macros : `renameMacro`, `macroUses`),
+     **copier** (la définition recopiée sous un nouveau nom, `duplicateMacro`) et **supprimer**
+     (`removeMacro` : refusée tant qu'une page ou une macro l'appelle, avec la liste des appelants ; la
+     dernière macro retirée emporte la clé `macros`). Chaque opération est validée avant et après par le serveur
+     et se défait avec Ctrl+Z.
    - 8c — Insérer un minget dans une page, avec un formulaire d'appel.
    - 8d — Extraire des instructions en minget, mettre à jour les usages.
    - 8e — La bibliothèque de mingets.

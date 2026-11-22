@@ -1000,3 +1000,144 @@ String mingetPreviewText(String text, String name, List<Object?> args) {
   };
   return jsonEncode(root);
 }
+
+// --- Les macros (mingets) ---
+
+/// Pourquoi [name] n'est pas un nom de macro utilisable, ou `null` s'il l'est.
+String? macroNameError(String name, Iterable<String> existing) {
+  if (name.isEmpty) return 'Un nom est nécessaire.';
+  if (!_nameRe.hasMatch(name)) {
+    return 'Lettres, chiffres, « - » et « _ » seulement.';
+  }
+  if (existing.contains(name)) return 'Une macro porte déjà ce nom.';
+  return null;
+}
+
+/// Un appel `macro: [nom, ...]` : où il est (« page sommaire », « macro cadre »,
+/// « init »...) et l'étendue du nom dans le texte.
+class MacroUse {
+  const MacroUse(this.where, this.start, this.end);
+
+  final String where;
+  final int start;
+  final int end;
+}
+
+/// Les appels de la macro [name] dans [text] : dans les écrans des pages (blocs
+/// `si` et `fois` compris), dans `init` et dans le corps des autres macros.
+List<MacroUse> macroUses(String text, String name) {
+  final uses = <MacroUse>[];
+  void walk(YamlNode node, String where) {
+    if (node is YamlMap) {
+      for (final e in node.nodes.entries) {
+        final key = e.key;
+        final value = e.value;
+        if (key is YamlScalar && key.value == 'macro' && value is YamlList) {
+          final first = value.nodes.isEmpty ? null : value.nodes.first;
+          if (first is YamlScalar && '${first.value}' == name) {
+            uses.add(
+              MacroUse(where, first.span.start.offset, first.span.end.offset),
+            );
+          }
+        }
+        walk(value, where);
+      }
+    } else if (node is YamlList) {
+      for (final n in node.nodes) {
+        walk(n, where);
+      }
+    }
+  }
+
+  final root = loadYamlNode(text);
+  if (root is! YamlMap) return const [];
+  for (final e in root.nodes.entries) {
+    final key = '${(e.key as YamlNode).value}';
+    final value = e.value;
+    if ((key == 'pages' || key == 'macros') && value is YamlMap) {
+      final label = key == 'pages' ? 'page' : 'macro';
+      for (final inner in value.nodes.entries) {
+        walk(inner.value, '$label ${(inner.key as YamlNode).value}');
+      }
+    } else {
+      walk(value, key);
+    }
+  }
+  return uses;
+}
+
+/// La clé de la macro [name] dans `macros:`.
+YamlScalar _macroKey(String text, String name) {
+  final macros = _rootOf(text)['macros'];
+  if (macros is YamlMap) {
+    for (final key in macros.nodes.keys) {
+      if (key is YamlScalar && '${key.value}' == name) return key;
+    }
+  }
+  throw EditException('Il n\'y a pas de macro « $name ».');
+}
+
+/// Renomme la macro [from] en [to], et tous ses appels.
+String renameMacro(String text, String from, String to) {
+  _requireValid(text);
+  final key = _macroKey(text, from);
+  final macros = _rootOf(text)['macros'] as YamlMap;
+  final error = macroNameError(
+    to,
+    macros.keys.cast<Object?>().map((k) => '$k'),
+  );
+  if (error != null) throw EditException('Nom « $to » : $error');
+  // Le nom est une clé : yaml_edit ne sait pas la renommer. On remplace le texte
+  // de la clé et celui de chaque appel, de la fin vers le début pour que les
+  // positions restent justes.
+  final spans = [
+    (key.span.start.offset, key.span.end.offset),
+    for (final u in macroUses(text, from)) (u.start, u.end),
+  ]..sort((a, b) => b.$1.compareTo(a.$1));
+  var out = text;
+  for (final (start, end) in spans) {
+    out = out.replaceRange(start, end, _pageScalar(to));
+  }
+  return _checked(out);
+}
+
+/// Supprime la macro [name]. Refuse si elle est encore appelée : [macroUses] dit
+/// où.
+String removeMacro(String text, String name) {
+  _requireValid(text);
+  final key = _macroKey(text, name);
+  final uses = macroUses(text, name);
+  if (uses.isNotEmpty) {
+    final where = {for (final u in uses) u.where}.join(', ');
+    throw EditException('La macro « $name » est encore appelée : $where.');
+  }
+  final macros = _rootOf(text)['macros'] as YamlMap;
+  if (macros.length == 1) {
+    return _checked(_cut(text, ['macros'], comments: true));
+  }
+  return _checked(_cut(text, ['macros', '${key.value}'], comments: true));
+}
+
+/// Copie la macro [from] sous le nom [to], juste après elle.
+String duplicateMacro(String text, String from, String to) {
+  _requireValid(text);
+  final key = _macroKey(text, from);
+  final macros = _rootOf(text)['macros'] as YamlMap;
+  final error = macroNameError(
+    to,
+    macros.keys.cast<Object?>().map((k) => '$k'),
+  );
+  if (error != null) throw EditException('Nom « $to » : $error');
+  final lines = text.split('\n');
+  final start = key.span.start.line;
+  final value = macros.nodes[key]!;
+  final end = _lastLine(value, lines, start);
+  final block = lines.sublist(start, end + 1);
+  final first = block.first;
+  block[0] =
+      first.substring(0, key.span.start.column) +
+      _pageScalar(to) +
+      first.substring(key.span.end.column);
+  lines.insertAll(end + 1, block);
+  return _checked(lines.join('\n'));
+}

@@ -139,6 +139,7 @@ pages:
     await tester.tap(find.byKey(const Key('minget-fixe')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('minget-error')), findsNothing);
+    await tester.ensureVisible(find.byType(Switch));
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('preview-screen')), findsOneWidget);
@@ -160,5 +161,82 @@ pages:
         .split('\n')
         .length;
     expect(text.split('\n')[line - 1], contains('vieille:'));
+  });
+
+  Future<void> enterName(WidgetTester tester, String name) async {
+    await tester.enterText(find.byKey(const Key('page-name')), name);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('renommer un minget : la clé, et il reste choisi', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('minget-vieille')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-rename')));
+    await tester.pumpAndSettle();
+    // Un nom déjà pris est refusé.
+    await tester.enterText(find.byKey(const Key('page-name')), 'trait');
+    await tester.pump();
+    expect(find.text('Une macro porte déjà ce nom.'), findsOneWidget);
+    await enterName(tester, 'ancienne');
+    expect(codeText(tester), contains('  ancienne:\n'));
+    expect(codeText(tester), isNot(contains('vieille')));
+    expect(find.byKey(const Key('minget-ancienne')), findsOneWidget);
+    expect(find.byKey(const Key('minget-vieille')), findsNothing);
+    // Toujours choisi : son aperçu et ses boutons sont là.
+    expect(find.byKey(const Key('minget-details')), findsOneWidget);
+  });
+
+  testWidgets('copier un minget', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('minget-trait')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-copy')));
+    await tester.pumpAndSettle();
+    // Le nom proposé est accepté tel quel.
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('minget-trait-copie')), findsOneWidget);
+    expect(codeText(tester), contains('  trait-copie:\n'));
+  });
+
+  testWidgets('supprimer : refusé si appelé, sinon confirmé', (tester) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(
+      find.byKey(const Key('code')),
+      _service.replaceFirst(
+        'ecran: [efface]',
+        'ecran:\n      - macro: [fixe, 3, "x", false]',
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('open-mingets')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-fixe')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-delete')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('minget-used')), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('minget-used'))).data,
+      contains('page a'),
+    );
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), contains('fixe:'));
+    // Un minget sans appel : supprimé après confirmation.
+    await tester.tap(find.byKey(const Key('minget-vieille')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), isNot(contains('vieille')));
+    expect(find.byKey(const Key('minget-vieille')), findsNothing);
+    expect(find.text('Choisissez un minget.'), findsOneWidget);
   });
 }

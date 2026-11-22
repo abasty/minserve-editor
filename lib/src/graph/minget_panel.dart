@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:minserve_core/minserve_core.dart';
 
 import '../preview/page_preview.dart';
+import 'graph_dialogs.dart';
+import 'graph_panel.dart' show GraphEditing;
 import 'service_edit.dart';
 
 const _numericKeys = {'ligne', 'col', 'largeur', 'hauteur', 'nombre', 'depuis'};
@@ -84,6 +86,7 @@ class MingetPanel extends StatefulWidget {
     required this.text,
     required this.onBack,
     this.onGoToMacro,
+    this.editing,
     this.color = false,
     this.onColorChanged,
     this.variables = const {},
@@ -96,6 +99,10 @@ class MingetPanel extends StatefulWidget {
   final String? text;
   final VoidCallback onBack;
   final void Function(String macro)? onGoToMacro;
+
+  /// De quoi modifier les macros (renommer, copier, supprimer) ; `null` : lecture
+  /// seule.
+  final GraphEditing? editing;
   final bool color;
   final ValueChanged<bool>? onColorChanged;
   final Map<String, String> variables;
@@ -120,6 +127,95 @@ class _MingetPanelState extends State<MingetPanel> {
       return _args[m.name] = defaultMingetArgs(m);
     }
     return saved;
+  }
+
+  Future<void> _rename(MacroDefinition m) async {
+    final editing = widget.editing!;
+    final to = await askPageName(
+      context,
+      title: 'Renommer « ${m.name} »',
+      action: 'Renommer',
+      existing: widget.service.macros.keys,
+      initial: m.name,
+      label: 'Nom du minget',
+      check: macroNameError,
+    );
+    if (to == null || !mounted) return;
+    final uses = macroUses(editing.text(), m.name).length;
+    if (editing.apply((t) => renameMacro(t, m.name, to))) {
+      // Les arguments d'essai suivent le minget.
+      final args = _args.remove(m.name);
+      if (args != null) _args[to] = args;
+      setState(() => _selected = to);
+      _say(
+        uses == 0
+            ? 'Minget renommé.'
+            : 'Minget renommé, $uses appel${uses > 1 ? 's' : ''} mis à jour.',
+      );
+    }
+  }
+
+  Future<void> _duplicate(MacroDefinition m) async {
+    final editing = widget.editing!;
+    final to = await askPageName(
+      context,
+      title: 'Copier « ${m.name} »',
+      action: 'Copier',
+      existing: widget.service.macros.keys,
+      initial: '${m.name}-copie',
+      label: 'Nom de la copie',
+      allowInitial: true,
+      check: macroNameError,
+    );
+    if (to == null || !mounted) return;
+    if (editing.apply((t) => duplicateMacro(t, m.name, to))) {
+      setState(() => _selected = to);
+    }
+  }
+
+  Future<void> _remove(MacroDefinition m) async {
+    final editing = widget.editing!;
+    final uses = macroUses(editing.text(), m.name);
+    if (uses.isNotEmpty) {
+      final where = {for (final u in uses) u.where}.join(', ');
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Supprimer « ${m.name} » ?'),
+          content: Text(
+            'Ce minget est encore appelé (${uses.length} '
+            'appel${uses.length > 1 ? 's' : ''}) : $where.\n\n'
+            'Retirez ou remplacez ces appels d\'abord.',
+            key: const Key('minget-used'),
+          ),
+          actions: [
+            FilledButton(
+              key: const Key('dialog-ok'),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Compris'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final ok = await confirmDialog(
+      context,
+      title: 'Supprimer « ${m.name} » ?',
+      body: 'Le minget sera retiré du texte. Aucune page ne l\'appelle.',
+      action: 'Supprimer',
+    );
+    if (!ok || !mounted) return;
+    if (editing.apply((t) => removeMacro(t, m.name))) {
+      _args.remove(m.name);
+      setState(() => _selected = null);
+    }
+  }
+
+  void _say(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _set(MacroDefinition m, int i, Object? value) {
@@ -245,6 +341,26 @@ class _MingetPanelState extends State<MingetPanel> {
                           icon: const Icon(Icons.restart_alt, size: 18),
                           label: const Text('Valeurs par défaut'),
                         ),
+                      if (widget.editing != null) ...[
+                        IconButton(
+                          key: const Key('minget-rename'),
+                          tooltip: 'Renommer le minget',
+                          icon: const Icon(Icons.drive_file_rename_outline),
+                          onPressed: () => _rename(m),
+                        ),
+                        IconButton(
+                          key: const Key('minget-copy'),
+                          tooltip: 'Copier le minget',
+                          icon: const Icon(Icons.content_copy),
+                          onPressed: () => _duplicate(m),
+                        ),
+                        IconButton(
+                          key: const Key('minget-delete'),
+                          tooltip: 'Supprimer le minget',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _remove(m),
+                        ),
+                      ],
                       if (widget.onGoToMacro != null)
                         TextButton.icon(
                           key: const Key('minget-goto'),
