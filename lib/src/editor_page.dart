@@ -427,6 +427,7 @@ class _EditorPageState extends State<EditorPage> {
                 return Stack(
                   children: [
                     Positioned(
+                      key: const ValueKey('pane-text'),
                       left: 0,
                       top: 0,
                       bottom: 0,
@@ -452,7 +453,11 @@ class _EditorPageState extends State<EditorPage> {
                           ),
                         ),
                       ),
+                    // Des clés : la poignée n'existe que dans un des modes, et sans
+                    // elles le graphe serait reconstruit (et sa page ouverte
+                    // perdue) à chaque changement de mode.
                     Positioned(
+                      key: const ValueKey('pane-graph'),
                       right: 0,
                       top: 0,
                       bottom: 0,

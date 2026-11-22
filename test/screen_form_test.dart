@@ -150,4 +150,30 @@ void main() {
     expect(codeText(tester), contains('ligne: 9'));
     expect(shown(), 'position: {ligne: 9, col: 2}');
   });
+
+  testWidgets('la page ouverte survit aux changements de mode', (tester) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), _service);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+    // Texte seul, puis graphe seul, puis les deux : la page reste ouverte.
+    for (final icon in [
+      Icons.code,
+      Icons.account_tree_outlined,
+      Icons.vertical_split,
+      Icons.code,
+      Icons.vertical_split,
+    ]) {
+      await tester.tap(find.byIcon(icon).first);
+      await tester.pumpAndSettle();
+      if (icon != Icons.code) {
+        expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+        expect(find.byKey(const Key('node-a')), findsNothing);
+      }
+    }
+  });
 }
