@@ -51,7 +51,10 @@ class _CommitFieldState extends State<CommitField> {
   @override
   void didUpdateWidget(CommitField old) {
     super.didUpdateWidget(old);
-    if (widget.value != old.value && !_focus.hasFocus) {
+    // Le texte a changé ailleurs (défaire, refaire, le graphe) : le champ le
+    // suit, sauf s'il porte une saisie pas encore validée.
+    if (widget.value != old.value &&
+        (!_focus.hasFocus || _controller.text == old.value)) {
       _controller.text = widget.value;
     }
   }

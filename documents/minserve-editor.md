@@ -376,7 +376,16 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      puis dans le reste du service, plus des variables ajoutées à la main. Le rendu en tient
      compte à chaque frappe. Les valeurs restent en mémoire (pas dans le `service.yaml`). Les
      `donnees` de la page ne sont pas chargées.
-   - 7b — L'`ecran` en liste d'instructions (réordonner, insérer, paramètres).
+   - **7b — L'`ecran` en liste d'instructions (première partie faite)** : onglet « Écran » du panneau
+     de la page (`screen_form.dart`, fonctions `screenItems`, `insertScreenItem`, `replaceScreenItem`,
+     `moveScreenItem`, `duplicateScreenItem`, `removeScreenItem` dans `service_edit.dart`). Une ligne par
+     instruction : on l'écrit à la main (une seule ligne, validée par le serveur), on la monte, la
+     descend, la copie, la supprime, ou on en insère une depuis un menu d'instructions avec valeurs par
+     défaut. Les commentaires au-dessus d'une instruction la suivent. Les instructions sur plusieurs lignes
+     (`si`, `fois`) sont montrées et se modifient dans le texte ; un écran écrit en ligne (`ecran: [efface]`)
+     ne se réordonne pas ; le dernier retrait laisse `ecran: []` (la clé est obligatoire). Reste : un
+     formulaire par instruction (ligne et colonne en champs numériques, couleurs en liste...), les macros dans
+     le menu, `si` et `fois`.
    - 7c — L'aperçu d'un morceau (macro avec arguments de test, bloc `fois`).
 8. **Les mingets** : forme étendue côté serveur, palette, formulaire d'appel, extraction,
    bibliothèque.

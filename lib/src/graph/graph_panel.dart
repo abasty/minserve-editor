@@ -8,6 +8,7 @@ import 'graph_dialogs.dart';
 import '../preview/page_preview.dart';
 import '../preview/test_data.dart';
 import 'page_forms.dart';
+import 'screen_form.dart';
 import 'layout.dart';
 import 'service_edit.dart';
 import 'service_graph.dart';
@@ -26,7 +27,7 @@ class GraphEditing {
 
 /// Le graphe des pages d'un service : une case par page, une flèche par
 /// transition. Toucher une page la sélectionne et met ses flèches en avant.
-enum _PageTab { overview, rules, input, access, preview }
+enum _PageTab { overview, rules, input, access, screen, preview }
 
 class GraphPanel extends StatefulWidget {
   const GraphPanel({
@@ -679,6 +680,7 @@ class _GraphPanelState extends State<GraphPanel> {
                           _PageTab.rules => 'action',
                           _PageTab.input => 'entree',
                           _PageTab.access => 'acces',
+                          _PageTab.screen => 'ecran',
                           _PageTab.preview => 'ecran',
                         },
                       ),
@@ -757,6 +759,10 @@ class _GraphPanelState extends State<GraphPanel> {
                         value: _PageTab.access,
                         label: Text('Accès'),
                       ),
+                      const ButtonSegment(
+                        value: _PageTab.screen,
+                        label: Text('Écran'),
+                      ),
                       if (!pageMode)
                         ButtonSegment(
                           value: _PageTab.preview,
@@ -781,6 +787,13 @@ class _GraphPanelState extends State<GraphPanel> {
                 )
               else if (editing != null && tab == _PageTab.input)
                 InputForm(
+                  page: name,
+                  text: editing.text(),
+                  apply: editing.apply,
+                  onGoToPage: widget.onGoToPage,
+                )
+              else if (editing != null && tab == _PageTab.screen)
+                ScreenForm(
                   page: name,
                   text: editing.text(),
                   apply: editing.apply,

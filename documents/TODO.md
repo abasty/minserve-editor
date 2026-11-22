@@ -35,3 +35,10 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 - [ ] **Texte limité à la page** : en mode page, ne montrer dans l'éditeur de texte que le YAML de la page ouverte (avec un lien « Tout le texte »). À décider selon l'usage.
 - [ ] La lettre `F` en haut à droite (ligne 00) est celle d'un terminal non connecté : peut-être la masquer dans l'aperçu.
 - [ ] Remplacer les dépendances `path:` (`minserve_core`, `minterm_view`) par `git:` avant de publier par GitHub Actions.
+
+## Écran (suite de l'étape 7b)
+
+- [ ] **Un formulaire par instruction** : champs numériques pour `ligne` / `col`, liste des couleurs, bascule actif / inactif, au lieu du texte libre.
+- [ ] **Les macros dans le menu d'ajout** (avec leurs arguments), et l'édition des blocs `si` et `fois`.
+- [ ] **Écran écrit en ligne** (`ecran: [efface]`) : le convertir en liste pour pouvoir le modifier.
+- [ ] **Montrer sur le rendu** l'instruction choisie dans la liste (et inversement), préparation de l'étape 9.

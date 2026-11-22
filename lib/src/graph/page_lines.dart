@@ -19,7 +19,8 @@ Map<String, int> pageLines(String text) {
 
 /// La ligne (à partir de 1) de la partie [section] (`action`, `entree`,
 /// `acces`...) de la page [page], ou de sa règle numéro [rule] (à partir de 0)
-/// si [section] est `action`. Si la partie n'existe pas, la ligne de la page ;
+/// si [section] est `action`, ou de son instruction numéro [rule] si c'est
+/// `ecran`. Si la partie n'existe pas, la ligne de la page ;
 /// `null` si la page n'existe pas.
 int? pageSectionLine(String text, String page, {String? section, int? rule}) {
   final start = pageLines(text)[page];
@@ -30,6 +31,12 @@ int? pageSectionLine(String text, String page, {String? section, int? rule}) {
     if (node is! YamlMap) return start;
     for (final key in node.nodes.keys) {
       if (key is YamlNode && '${key.value}' == section) {
+        if (rule != null && section == 'ecran') {
+          final list = node.nodes[key];
+          if (list is YamlList && rule >= 0 && rule < list.length) {
+            return list.nodes[rule].span.start.line + 1;
+          }
+        }
         if (rule != null && section == 'action') {
           final saisies = (node.nodes[key] as YamlMap?)?.nodes['saisies'];
           if (saisies is YamlList && rule >= 0 && rule < saisies.length) {

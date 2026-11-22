@@ -70,13 +70,28 @@ class _EditorPageState extends State<EditorPage> {
   void initState() {
     super.initState();
     _text.addListener(_edited);
+    FocusManager.instance.addListener(_focusChanged);
     _useGraph(_diagnostics);
+  }
+
+  /// Un champ qui se ferme (Entrée dans un formulaire, par exemple) laisse le
+  /// focus à personne : sans lui, Ctrl+Z n'arrive plus à la page. On le rend à
+  /// la page.
+  void _focusChanged() {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null && focus is! FocusScopeNode) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final now = FocusManager.instance.primaryFocus;
+      if (now == null || now is FocusScopeNode) _pageFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _typingTimer?.cancel();
+    FocusManager.instance.removeListener(_focusChanged);
     _pageFocus.dispose();
     _text.dispose();
     super.dispose();
@@ -172,6 +187,9 @@ class _EditorPageState extends State<EditorPage> {
         ..showSnackBar(SnackBar(content: Text(e.message)));
       return false;
     }
+    // Une modification qui ne change rien (un champ validé deux fois, par
+    // Entrée puis en perdant le focus) n'est pas une étape d'historique.
+    if (result == _text.text) return true;
     // Le graphe suit tout de suite, sans attendre la fin d'une frappe.
     _history.record(_snapshot);
     _typing = false;

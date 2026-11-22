@@ -641,3 +641,254 @@ accessOf(String text, String page) {
     provisional: false,
   );
 }
+
+// --- L'écran d'une page ---
+
+/// Une instruction de l'`ecran` d'une page, telle qu'elle est écrite dans le
+/// texte : `efface`, `position: {ligne: 3, col: 5}`...
+class ScreenItem {
+  const ScreenItem(this.index, this.text, this.name, this.multiline);
+
+  final int index;
+
+  /// Son texte, sans le tiret de liste.
+  final String text;
+
+  /// Le nom de l'instruction (`position`, `ecrit`...).
+  final String name;
+
+  /// Vrai si elle s'écrit sur plusieurs lignes (`si`, `fois`...).
+  final bool multiline;
+}
+
+/// Les instructions de l'`ecran` de la page [page] ; vide si elle n'en a pas ou
+/// si le texte n'est pas lisible.
+List<ScreenItem> screenItems(String text, String page) {
+  try {
+    final list = YamlEditor(text).parseAt(['pages', page, 'ecran']);
+    if (list is! YamlList) return const [];
+    final lines = text.split('\n');
+    return [
+      for (var i = 0; i < list.nodes.length; i++)
+        _screenItem(i, list.nodes[i], lines),
+    ];
+  } on Object {
+    return const [];
+  }
+}
+
+ScreenItem _screenItem(int index, YamlNode node, List<String> lines) {
+  final start = node.span.start.line;
+  final end = _contentEnd(node, lines);
+  final multiline = end > start;
+  final text = multiline
+      ? [
+          lines[start].substring(node.span.start.column),
+          ...lines.sublist(start + 1, end + 1),
+        ].join('\n')
+      : _oneLine(node);
+  final value = node is YamlMap
+      ? (node.keys.isEmpty ? '' : '${node.keys.first}')
+      : '${node.value}';
+  return ScreenItem(index, text, value, multiline);
+}
+
+/// La dernière ligne d'écriture de [node] : l'étendue d'une table peut englober
+/// les lignes vides ou les commentaires qui la suivent.
+int _contentEnd(YamlNode node, List<String> lines) {
+  final start = node.span.start.line;
+  var end = _lastLine(node, lines, start);
+  while (end > start &&
+      (lines[end].trim().isEmpty || lines[end].trimLeft().startsWith('#'))) {
+    end--;
+  }
+  return end;
+}
+
+/// Le texte d'une instruction écrite sur une seule ligne : l'étendue d'une
+/// table ne s'arrête pas toujours à sa dernière ligne, on la coupe.
+String _oneLine(YamlNode node) => node.span.text.split('\n').first.trimRight();
+
+/// Vérifie que [item] est une instruction écrite sur une ligne : un mot, ou
+/// `mot: valeur`.
+void _checkInstruction(String item) {
+  final text = item.trim();
+  if (text.isEmpty) {
+    throw EditException('Une instruction ne peut pas être vide.');
+  }
+  if (text.contains('\n')) {
+    throw EditException('Une instruction tient sur une ligne ici.');
+  }
+  Object? value;
+  try {
+    value = loadYaml(text);
+  } on YamlException catch (e) {
+    throw EditException('Instruction illisible : ${e.message}');
+  }
+  if (value is YamlMap) {
+    if (value.length != 1) {
+      throw EditException('Une instruction n\'a qu\'une clé : `nom: valeur`.');
+    }
+  } else if (value is! String) {
+    throw EditException('Une instruction est un mot ou `nom: valeur`.');
+  }
+}
+
+/// Le texte de la liste `ecran` de [page], ses éléments et les lignes du texte.
+({YamlList list, List<String> lines}) _screenOf(String text, String page) {
+  final list = YamlEditor(text).parseAt(['pages', page, 'ecran']);
+  if (list is! YamlList) throw EditException('Cet écran n\'a pas de liste.');
+  return (list: list, lines: text.split('\n'));
+}
+
+/// Le texte qui précède l'élément [node] sur sa ligne (`      - `), ou `null` si
+/// la liste n'est pas écrite un élément par ligne.
+String? _dash(YamlNode node, List<String> lines) {
+  final before = lines[node.span.start.line].substring(
+    0,
+    node.span.start.column,
+  );
+  return RegExp(r'^\s*-\s+$').hasMatch(before) ? before : null;
+}
+
+/// La clé `ecran` d'une page.
+YamlNode _screenKey(YamlMap page) =>
+    page.nodes.keys.cast<YamlNode>().firstWhere((k) => k.value == 'ecran');
+
+/// Ajoute l'instruction [item] à l'écran de [page], en position [index] (la
+/// fin si [index] vaut le nombre d'instructions).
+String insertScreenItem(String text, String page, int index, String item) {
+  _requireValid(text);
+  _checkInstruction(item);
+  final line = item.trim();
+  final node = YamlEditor(text).parseAt(['pages', page]);
+  if (node is! YamlMap) throw EditException('Il n\'y a pas de page « $page ».');
+  final lines = text.split('\n');
+  final ecran = node.nodes['ecran'];
+  if (ecran is! YamlList) throw EditException('L\'écran n\'est pas une liste.');
+  if (index < 0 || index > ecran.length) {
+    throw EditException('Cette place n\'existe pas.');
+  }
+  if (ecran.isEmpty) {
+    // `ecran: []` : on le remplace par une liste, une instruction par ligne.
+    final key = _screenKey(node);
+    final pad = ' ' * key.span.start.column;
+    lines.replaceRange(key.span.start.line, key.span.start.line + 1, [
+      '${pad}ecran:',
+      '$pad  - $line',
+    ]);
+    return _checked(lines.join('\n'));
+  }
+  final dash = _dash(ecran.nodes[0], lines);
+  if (dash == null) {
+    throw EditException(
+      'Cet écran est écrit en ligne : ajoutez l\'instruction dans le texte.',
+    );
+  }
+  final at = index < ecran.length
+      ? ecran.nodes[index].span.start.line
+      : _lastLine(ecran.nodes.last, lines, ecran.nodes.last.span.start.line) +
+            1;
+  lines.insert(at, '$dash$line');
+  return _checked(lines.join('\n'));
+}
+
+/// Retire l'instruction [index] de l'écran de [page]. La dernière retirée,
+/// l'écran reste, vide (`ecran: []`) : le service exige la clé.
+String removeScreenItem(String text, String page, int index) {
+  _requireValid(text);
+  final s = _screenOf(text, page);
+  if (index < 0 || index >= s.list.length) {
+    throw EditException('Cette instruction n\'existe pas.');
+  }
+  final base = ['pages', page, 'ecran'];
+  if (s.list.length == 1) {
+    final node = YamlEditor(text).parseAt(['pages', page]) as YamlMap;
+    final key = _screenKey(node);
+    final first = key.span.start.line;
+    final last = _lastLine(s.list, s.lines, first);
+    s.lines.replaceRange(first, last + 1, [
+      '${' ' * key.span.start.column}ecran: []',
+    ]);
+    return _checked(s.lines.join('\n'));
+  }
+  return _checked(_cut(text, [...base, index], comments: index > 0));
+}
+
+/// Remplace l'instruction [index] par [item] (une ligne).
+String replaceScreenItem(String text, String page, int index, String item) {
+  _requireValid(text);
+  _checkInstruction(item);
+  final s = _screenOf(text, page);
+  if (index < 0 || index >= s.list.length) {
+    throw EditException('Cette instruction n\'existe pas.');
+  }
+  final node = s.list.nodes[index];
+  final start = node.span.start.line;
+  if (_contentEnd(node, s.lines) > start) {
+    throw EditException(
+      'Cette instruction s\'écrit sur plusieurs lignes : modifiez-la dans le '
+      'texte.',
+    );
+  }
+  return _checked(
+    text.replaceRange(
+      node.span.start.offset,
+      node.span.start.offset + _oneLine(node).length,
+      item.trim(),
+    ),
+  );
+}
+
+/// Les lignes (à partir de 0) de l'instruction [i] : de sa ligne de tiret à sa
+/// dernière ligne.
+(int, int) _screenSpan(YamlList list, int i, List<String> lines) {
+  final node = list.nodes[i];
+  return (node.span.start.line, _contentEnd(node, lines));
+}
+
+/// Copie l'instruction [index] juste après elle.
+String duplicateScreenItem(String text, String page, int index) {
+  _requireValid(text);
+  final s = _screenOf(text, page);
+  if (index < 0 || index >= s.list.length) {
+    throw EditException('Cette instruction n\'existe pas.');
+  }
+  if (_dash(s.list.nodes[index], s.lines) == null) {
+    throw EditException('Cet écran est écrit en ligne : copiez dans le texte.');
+  }
+  final (start, end) = _screenSpan(s.list, index, s.lines);
+  s.lines.insertAll(end + 1, s.lines.sublist(start, end + 1));
+  return _checked(s.lines.join('\n'));
+}
+
+/// Déplace l'instruction [index] de [delta] places. L'ordre compte : une
+/// `position` ou une couleur n'agit que sur ce qui suit. Les commentaires
+/// au-dessus d'une instruction la suivent.
+String moveScreenItem(String text, String page, int index, int delta) {
+  _requireValid(text);
+  final s = _screenOf(text, page);
+  final to = index + delta;
+  if (index < 0 ||
+      index >= s.list.length ||
+      to < 0 ||
+      to >= s.list.length ||
+      delta == 0) {
+    throw EditException('Cette instruction ne peut pas bouger.');
+  }
+  for (final i in [index, to]) {
+    if (_dash(s.list.nodes[i], s.lines) == null) {
+      throw EditException(
+        'Cet écran est écrit en ligne : déplacez dans le texte.',
+      );
+    }
+  }
+  final a = index < to ? index : to;
+  final (aStart, aEnd) = _screenSpan(s.list, a, s.lines);
+  final (bStart, bEnd) = _screenSpan(s.list, a + 1, s.lines);
+  final first = s.lines.sublist(aStart, aEnd + 1);
+  final gap = s.lines.sublist(aEnd + 1, bStart);
+  final second = s.lines.sublist(bStart, bEnd + 1);
+  s.lines.replaceRange(aStart, bEnd + 1, [...gap, ...second, ...first]);
+  return _checked(s.lines.join('\n'));
+}
