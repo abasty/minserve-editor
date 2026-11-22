@@ -8,6 +8,7 @@ import '../split_handle.dart';
 import 'graph_dialogs.dart';
 import '../preview/page_preview.dart';
 import '../preview/test_data.dart';
+import 'minget_panel.dart';
 import 'page_forms.dart';
 import 'screen_form.dart';
 import 'layout.dart';
@@ -39,6 +40,7 @@ class GraphPanel extends StatefulWidget {
     required this.graph,
     required this.layout,
     this.onGoToPage,
+    this.onGoToMacro,
     this.editing,
     this.service,
     this.stale,
@@ -49,6 +51,9 @@ class GraphPanel extends StatefulWidget {
 
   /// Demande d'aller à la déclaration de la page dans le texte.
   final void Function(String page, {String? section, int? rule})? onGoToPage;
+
+  /// Demande d'aller à la définition d'une macro dans le texte.
+  final void Function(String macro)? onGoToMacro;
 
   /// De quoi modifier le service depuis le graphe ; `null` : lecture seule.
   final GraphEditing? editing;
@@ -80,6 +85,9 @@ class _GraphPanelState extends State<GraphPanel> {
 
   /// Le panneau des données de test est ouvert ; leurs valeurs (variables).
   bool _dataOpen = false;
+
+  /// Le panneau des mingets (les macros du service) est ouvert.
+  bool _mingetsOpen = false;
 
   /// L'instruction choisie dans l'onglet Écran, et ce que l'aperçu en montre :
   /// la page entière, l'écran jusqu'à elle, ou elle seule.
@@ -343,6 +351,18 @@ class _GraphPanelState extends State<GraphPanel> {
     final unreachable = graph.unreachable;
     final matches = _matches;
     final open = _open;
+    final service = widget.service;
+    if (_mingetsOpen && service != null) {
+      return MingetPanel(
+        service: service,
+        text: widget.editing?.text(),
+        onBack: () => setState(() => _mingetsOpen = false),
+        onGoToMacro: widget.onGoToMacro,
+        color: _previewColor,
+        onColorChanged: (v) => setState(() => _previewColor = v),
+        variables: _testVars,
+      );
+    }
     return Column(
       children: [
         if (widget.stale != null)
@@ -643,6 +663,13 @@ class _GraphPanelState extends State<GraphPanel> {
               tooltip: 'Nouvelle page',
               icon: const Icon(Icons.add_box_outlined),
               onPressed: _addPage,
+            ),
+          if (widget.service != null)
+            TextButton.icon(
+              key: const Key('open-mingets'),
+              onPressed: () => setState(() => _mingetsOpen = true),
+              icon: const Icon(Icons.widgets_outlined, size: 18),
+              label: Text('Mingets (${widget.service!.macros.length})'),
             ),
           IconButton(
             tooltip: 'Tout voir',

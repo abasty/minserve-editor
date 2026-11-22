@@ -399,8 +399,19 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      serveur refuserait (par exemple un `si` coupé) s'explique sous l'écran. Une macro qu'aucune page
      n'appelle ne se montre pas encore : elle viendra avec les mingets (étape 8, formulaire d'appel avec
      arguments de test).
-8. **Les mingets** : forme étendue côté serveur, palette, formulaire d'appel, extraction,
-   bibliothèque.
+8. **Les mingets**, en cinq parties :
+   - **8a — Forme étendue côté serveur (faite)** : `{description, parametres, ecran}`, contrôle des appels,
+     arguments omis complétés par `defaut` ; `Service.macros` (voir §9).
+   - **8b — Lister et prévisualiser (faite)** : le bouton « Mingets (n) » de la barre du graphe ouvre la liste
+     des macros du service (`minget_panel.dart`). Choisir un minget le montre sur un écran Minitel avec des
+     arguments d'essai (un champ par paramètre : entier, texte, interrupteur pour un booléen ; valeurs par défaut,
+     bouton « Valeurs par défaut »). L'aperçu fabrique une page temporaire `__minget__` qui efface l'écran puis
+     appelle la macro (`mingetPreviewText`), relue par le vrai serveur : un appel refusé s'explique à la place de
+     l'écran. Pour une macro écrite en liste d'instructions, le type de chaque `$n` est deviné d'après le corps
+     (`ligne: $1` : entier ; `ecrit: "$3"` ou `longueur($4)` : texte). « Dans le texte » va à la définition.
+   - 8c — Insérer un minget dans une page, avec un formulaire d'appel.
+   - 8d — Extraire des instructions en minget, mettre à jour les usages.
+   - 8e — La bibliothèque de mingets.
 9. **Édition directe sur l'aperçu** (§5.3).
 
 Les étapes 6 à 8 peuvent s'intervertir selon l'envie : l'aperçu apporte beaucoup à peu de frais

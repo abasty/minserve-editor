@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:minserve_editor/src/graph/page_lines.dart';
 import 'package:minserve_core/minserve_core.dart';
 import 'package:minserve_editor/src/graph/service_edit.dart';
 
@@ -237,5 +238,34 @@ pages:
           .length,
       3,
     );
+  });
+
+  test('un minget se montre sur une page temporaire', () {
+    const text = r'''
+debut: a
+macros:
+  trait:
+    parametres:
+      - {nom: ligne, type: entier, defaut: 5, min: 1, max: 24}
+      - {nom: texte, type: texte, defaut: "x"}
+    ecran:
+      - position: {ligne: $1, col: 1}
+      - ecrit: $2
+pages:
+  a:
+    ecran: [efface]
+''';
+    expect(macroLines(text), {'trait': 3});
+    final preview = mingetPreviewText(text, 'trait', [7, 'salut']);
+    final service = Service.parseString(preview);
+    expect(service.pages.keys, ['a', mingetPage]);
+    expect(service.pages[mingetPage]!.screen.length, 3);
+    // Un appel refusé par le serveur l'est aussi ici.
+    expect(
+      () => Service.parseString(mingetPreviewText(text, 'trait', [99, 'x'])),
+      throwsA(isA<ServiceException>()),
+    );
+    // Le texte d'origine n'est pas modifié.
+    expect(text, isNot(contains(mingetPage)));
   });
 }

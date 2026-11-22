@@ -175,6 +175,15 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
+  void _goToMacro(String name) {
+    final line = macroLines(_text.text)[name];
+    if (line == null) return;
+    if (_mode == ViewMode.graph) setState(() => _mode = ViewMode.both);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _commands.goToLine(line),
+    );
+  }
+
   /// Modifie le texte à la demande du graphe. Rend faux, en disant pourquoi, si
   /// la modification est refusée : le texte n'a alors pas changé.
   bool _applyEdit(String Function(String text) edit) {
@@ -475,6 +484,7 @@ class _EditorPageState extends State<EditorPage> {
                                 layout: _layout!,
                                 service: _diagnostics.service,
                                 onGoToPage: _goToPage,
+                                onGoToMacro: _goToMacro,
                                 editing: _diagnostics.isValid
                                     ? GraphEditing(
                                         text: () => _text.text,

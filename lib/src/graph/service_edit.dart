@@ -7,6 +7,8 @@
 /// pas modifié.
 library;
 
+import 'dart:convert';
+
 import 'package:minserve_core/minserve_core.dart';
 import 'package:yaml/yaml.dart';
 import 'package:yaml_edit/yaml_edit.dart';
@@ -974,4 +976,27 @@ String screenSlice(String text, String page, int from, int to) {
       [for (var i = from; i <= to; i++) _plain(list[i])],
     );
   return e.toString();
+}
+
+/// Le nom de la page temporaire qui sert à montrer un minget.
+const mingetPage = '__minget__';
+
+/// Le texte du service avec, en plus, une page [mingetPage] qui efface l'écran
+/// puis appelle la macro [name] avec [args] : de quoi la voir sans l'avoir mise
+/// dans une vraie page. Ce texte ne sert qu'à l'aperçu ; il est écrit en JSON
+/// (qui est du YAML) pour ne dépendre d'aucune mise en forme.
+String mingetPreviewText(String text, String name, List<Object?> args) {
+  final root = _plain(loadYaml(text));
+  if (root is! Map || root['pages'] is! Map) {
+    throw EditException('Le texte n\'est pas un service.');
+  }
+  (root['pages'] as Map)[mingetPage] = {
+    'ecran': [
+      'efface',
+      {
+        'macro': [name, ...args],
+      },
+    ],
+  };
+  return jsonEncode(root);
 }

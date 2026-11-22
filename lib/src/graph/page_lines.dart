@@ -51,3 +51,20 @@ int? pageSectionLine(String text, String page, {String? section, int? rule}) {
   }
   return start;
 }
+
+/// La ligne (à partir de 1) où chaque macro est définie dans [text], par nom.
+/// Vide si le texte n'est pas un YAML lisible ou n'a pas de `macros`.
+Map<String, int> macroLines(String text) {
+  try {
+    final root = loadYamlNode(text);
+    if (root is! YamlMap) return const {};
+    final macros = root.nodes['macros'];
+    if (macros is! YamlMap) return const {};
+    return {
+      for (final key in macros.nodes.keys)
+        if (key is YamlNode) '${key.value}': key.span.start.line + 1,
+    };
+  } on YamlException {
+    return const {};
+  }
+}
