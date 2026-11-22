@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minserve_editor/src/editor_page.dart';
+import 'package:minserve_editor/src/assets.dart';
 import 'package:minserve_editor/src/file_access.dart';
 
 class FakeFiles implements FileAccess {
@@ -21,6 +22,12 @@ class FakeFiles implements FileAccess {
 
   @override
   final bool savesInPlace;
+
+  /// Les assets que « le disque » donne au service enregistré.
+  AssetSource? assets;
+
+  @override
+  AssetSource? assetsFor(String? servicePath) => assets;
 
   @override
   Future<OpenedFile?> open() async {

@@ -593,7 +593,19 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
    fermeture corrigée est à réessayer.
    **D1b, à faire** : fichiers récents et dernier service rouvert (réglages dans `~/.config/minserve-editor/`),
    surveillance du fichier (modification extérieure : recharger ou garder).
-3. **D2, assets** (§11.2) : lecture et aperçu d'abord, puis liste / choix dans le formulaire, puis glisser-déposer.
+3. **D2, assets** (§11.2), en trois temps :
+   - **D2a, lire les assets pour l'aperçu (faite)** : `lib/src/assets.dart` (`AssetSource`, `AssetException`,
+     `MapAssets`, `AssetsScope`) ; `FileAccess.assetsFor(chemin du service)` rend `DirectoryAssets` sur le
+     bureau (`assets/` à côté du `service.yaml`, avec les règles du serveur : chemin relatif, rien hors du
+     dossier liens symboliques résolus, fichier ordinaire, 256 Ko au plus) et `null` dans le navigateur ou
+     pour un service pas encore enregistré. `renderPreview(..., source:)` lit les `affiche` ; un fichier
+     illisible n'arrête pas l'aperçu, la note « Fichiers affiche non montrés (dossier …) » donne la raison de
+     chacun. `AssetsScope` (dans `EditorPage`) évite de faire passer la source dans tout le graphe.
+   - **D2b, à faire** : réglage du dossier assets (choisir un autre dossier, mémorisé par service), liste des
+     assets, choix d'un fichier dans le formulaire de l'instruction `affiche` avec aperçu du `.vdt`,
+     signalement d'un chemin introuvable dans l'éditeur.
+   - **D2c, à faire** : glisser-déposer d'un fichier dans l'éditeur (copie dans `assets/`, sans écraser sans
+     confirmation).
 4. **D3, choix parmi §11.3**, selon l'envie.
 
 Les étapes D se glissent entre les étapes 8 et 9 du §8 selon l'envie ; D1 et D2 n'ont aucune dépendance avec les

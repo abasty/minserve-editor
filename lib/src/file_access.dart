@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 
+import 'assets.dart';
+
 /// Un fichier ouvert ou enregistré : son nom, son texte et, sur le bureau, son
 /// chemin (le navigateur n'en a pas).
 class OpenedFile {
@@ -34,6 +36,10 @@ abstract interface class FileAccess {
   /// chaque enregistrement est un téléchargement (le navigateur).
   bool get savesInPlace;
 
+  /// Les assets du service enregistré à [servicePath], ou `null` si on ne les
+  /// a pas (le navigateur, ou un service pas encore enregistré).
+  AssetSource? assetsFor(String? servicePath);
+
   /// Demande un fichier à la personne ; `null` si elle annule.
   Future<OpenedFile?> open();
 
@@ -54,6 +60,9 @@ class BrowserFileAccess implements FileAccess {
 
   @override
   bool get savesInPlace => false;
+
+  @override
+  AssetSource? assetsFor(String? servicePath) => null;
 
   @override
   Future<OpenedFile?> open() async {

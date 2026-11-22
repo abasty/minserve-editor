@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
+import 'assets.dart';
 import 'file_access.dart';
 
 /// Le bureau : le fichier ouvert est réécrit en place.
@@ -75,6 +77,13 @@ class DesktopFileAccess implements FileAccess {
   bool get savesInPlace => true;
 
   @override
+  AssetSource? assetsFor(String? servicePath) => servicePath == null
+      ? null
+      : DirectoryAssets(
+          Directory('${File(servicePath).absolute.parent.path}/assets'),
+        );
+
+  @override
   Future<OpenedFile?> open() async {
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: 'Ouvrir un service',
@@ -105,5 +114,60 @@ class DesktopFileAccess implements FileAccess {
     }
     await writeServiceFile(target, text);
     return OpenedFile(_baseName(target), text, path: target);
+  }
+}
+
+/// Les assets d'un dossier du disque, avec les règles du serveur : un chemin
+/// relatif, rien en dehors du dossier (liens symboliques résolus), un vrai
+/// fichier, pas plus de [maxAssetSize] octets.
+class DirectoryAssets implements AssetSource {
+  const DirectoryAssets(this.directory);
+
+  final Directory directory;
+
+  @override
+  String get label => directory.path;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DirectoryAssets && other.directory.path == directory.path;
+
+  @override
+  int get hashCode => directory.path.hashCode;
+
+  @override
+  Uint8List read(String path) {
+    final String root;
+    try {
+      root = directory.resolveSymbolicLinksSync();
+    } on FileSystemException {
+      throw AssetException('dossier assets introuvable : ${directory.path}');
+    }
+    if (path.startsWith('/')) {
+      throw AssetException('fichier hors du dossier assets : $path');
+    }
+    final String real;
+    try {
+      real = File('$root/$path').resolveSymbolicLinksSync();
+    } on FileSystemException {
+      throw AssetException('fichier introuvable dans assets : $path');
+    }
+    if (!real.startsWith('$root/')) {
+      throw AssetException('fichier hors du dossier assets : $path');
+    }
+    if (FileSystemEntity.typeSync(real) != FileSystemEntityType.file) {
+      throw AssetException('pas un fichier : $path');
+    }
+    final file = File(real);
+    try {
+      if (file.lengthSync() > maxAssetSize) {
+        throw AssetException(
+          'fichier trop gros (> $maxAssetSize octets) : $path',
+        );
+      }
+      return file.readAsBytesSync();
+    } on FileSystemException {
+      throw AssetException('fichier illisible : $path');
+    }
   }
 }

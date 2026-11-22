@@ -4,12 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:minserve_core/minserve_core.dart';
 import 'package:minterm_view/minterm_view.dart';
 
+import '../assets.dart';
+
 /// Ce que le serveur enverrait au terminal pour afficher [page] : l'écran
-/// d'initialisation du service, puis la page. Les fichiers `affiche` ne sont
-/// pas lus (le navigateur n'a pas accès aux fichiers du service) : ceux qui
-/// manquent sont listés dans [missing].
+/// d'initialisation du service, puis la page. Les fichiers `affiche` viennent
+/// du dossier assets du service quand on l'a (le bureau) ; ceux qu'on n'a pas pu
+/// lire sont listés dans [missing] (avec la raison dans [problems]).
 class PagePreviewData {
-  PagePreviewData(this.minitel, this.missing, this.error);
+  PagePreviewData(
+    this.minitel,
+    this.missing,
+    this.error, [
+    this.problems = const {},
+  ]);
+
+  /// Pourquoi chaque fichier de [missing] n'a pas pu être lu (vide si on n'a
+  /// pas de dossier assets).
+  final Map<String, String> problems;
 
   /// Le terminal Minitel, avec la page affichée.
   final TMinitel minitel;
@@ -28,9 +39,18 @@ PagePreviewData renderPreview(
   Map<String, String> variables = const {},
   DateTime? now,
   bool inputZone = true,
+  AssetSource? source,
 }) {
   final missing = <String>[];
+  final problems = <String, String>{};
   Uint8List assets(String path) {
+    if (source != null) {
+      try {
+        return source.read(path);
+      } on AssetException catch (e) {
+        problems[path] = e.message;
+      }
+    }
     if (!missing.contains(path)) missing.add(path);
     return Uint8List(0);
   }
@@ -75,7 +95,7 @@ PagePreviewData renderPreview(
   } on Object catch (e) {
     error = e is ServiceException ? e.message : '$e';
   }
-  return PagePreviewData(minitel, missing, error);
+  return PagePreviewData(minitel, missing, error, problems);
 }
 
 /// L'aperçu d'une page : son écran Minitel, tel que le serveur l'afficherait.
@@ -121,11 +141,13 @@ class PagePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final servicePage = service.pages[page];
     if (servicePage == null) return const SizedBox.shrink();
+    final source = AssetsScope.of(context);
     final data = renderPreview(
       service,
       servicePage,
       variables: variables,
       inputZone: inputZone,
+      source: source,
     );
     final theme = Theme.of(context);
     final palette = color ? MinColors : MinGrey;
@@ -165,9 +187,15 @@ class PagePreview extends StatelessWidget {
           ),
         if (data.missing.isNotEmpty)
           Text(
-            'Fichiers « affiche » non montrés (l\'éditeur n\'a pas les '
-            'fichiers du service) : ${data.missing.join(', ')}.',
+            source == null
+                ? 'Fichiers « affiche » non montrés (l\'éditeur n\'a pas les '
+                      'fichiers du service) : ${data.missing.join(', ')}.'
+                : 'Fichiers « affiche » non montrés (dossier ${source.label}) : '
+                      '${[for (final p in data.missing) data.problems[p] ?? p].join(' ; ')}.',
             key: const Key('preview-missing'),
+            style: source == null
+                ? null
+                : TextStyle(color: theme.colorScheme.error),
           ),
         Text(
           'Les données de la page (messages, compteurs…) ne sont pas '
