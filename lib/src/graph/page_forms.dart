@@ -93,8 +93,8 @@ class _CommitFieldState extends State<CommitField> {
 }
 
 /// Une liste déroulante compacte.
-class _Pick extends StatelessWidget {
-  const _Pick({
+class Pick extends StatelessWidget {
+  const Pick({
     super.key,
     required this.value,
     required this.items,
@@ -290,7 +290,7 @@ class RulesForm extends StatelessWidget {
                     ),
             ),
           ),
-          _Pick(
+          Pick(
             key: Key('rule-touche-$i'),
             width: 130,
             label: 'Touche',
@@ -299,7 +299,7 @@ class RulesForm extends StatelessWidget {
             onChanged: (v) => apply((t) => setValue(t, [...path, 'touche'], v)),
           ),
           const Icon(Icons.arrow_forward, size: 16),
-          _Pick(
+          Pick(
             key: Key('rule-suivant-$i'),
             width: 150,
             label: 'Page',
@@ -451,7 +451,7 @@ class InputForm extends StatelessWidget {
         _int(zone, 'ligne', 'Ligne'),
         _int(zone, 'col', 'Colonne'),
         _int(zone, 'longueur', 'Longueur'),
-        _Pick(
+        Pick(
           key: const Key('input-curseur'),
           width: 130,
           label: 'Curseur',
@@ -463,7 +463,7 @@ class InputForm extends StatelessWidget {
                 : setValue(t, [...path, 'curseur'], v),
           ),
         ),
-        _Pick(
+        Pick(
           key: const Key('input-casse'),
           width: 140,
           label: 'Casse',
@@ -581,7 +581,7 @@ class AccessForm extends StatelessWidget {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        _Pick(
+        Pick(
           key: const Key('access-mode'),
           width: 250,
           label: 'Accès',
@@ -595,7 +595,7 @@ class AccessForm extends StatelessWidget {
               change(mode: AccessMode.values.firstWhere((m) => m.name == v)),
         ),
         if (a.mode == AccessMode.members) ...[
-          _Pick(
+          Pick(
             key: const Key('access-sinon'),
             width: 200,
             label: 'Sinon, aller à',

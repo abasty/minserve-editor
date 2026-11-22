@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:minserve_core/minserve_core.dart' show yamlString;
+import 'package:yaml/yaml.dart';
 
+import 'color_pick.dart';
 import 'page_forms.dart';
 import 'service_edit.dart';
 
@@ -40,7 +44,7 @@ const screenPalette = <(String, String)>[
 /// terminal les reçoit. On peut en ajouter, les changer de place, les copier, les
 /// supprimer, ou écrire une instruction à la main. Une instruction sur plusieurs
 /// lignes (`si`, `fois`) se modifie dans le texte.
-class ScreenForm extends StatelessWidget {
+class ScreenForm extends StatefulWidget {
   const ScreenForm({
     super.key,
     required this.page,
@@ -54,16 +58,29 @@ class ScreenForm extends StatelessWidget {
   final ApplyEdit apply;
   final void Function(String page, {String? section, int? rule})? onGoToPage;
 
+  @override
+  State<ScreenForm> createState() => _ScreenFormState();
+}
+
+class _ScreenFormState extends State<ScreenForm> {
+  String get page => widget.page;
+  String get text => widget.text;
+  ApplyEdit get apply => widget.apply;
+  void Function(String page, {String? section, int? rule})? get onGoToPage =>
+      widget.onGoToPage;
+
+  /// Les instructions qu'on montre en texte plutôt qu'en champs.
+  final _asText = <int>{};
+
   Widget _insert(BuildContext context, int at, {required Widget child}) {
-    return PopupMenuButton<String>(
+    return InkWell(
       key: Key('screen-add-$at'),
-      tooltip: 'Insérer une instruction',
-      onSelected: (item) => apply((t) => insertScreenItem(t, page, at, item)),
-      itemBuilder: (context) => [
-        for (final (label, item) in screenPalette)
-          PopupMenuItem(value: item, child: Text(label)),
-      ],
-      child: child,
+      borderRadius: BorderRadius.circular(6),
+      onTap: () async {
+        final item = await askInstruction(context);
+        if (item != null) apply((t) => insertScreenItem(t, page, at, item));
+      },
+      child: Tooltip(message: 'Insérer une instruction', child: child),
     );
   }
 
@@ -96,15 +113,30 @@ class ScreenForm extends StatelessWidget {
                 Expanded(
                   child: item.multiline
                       ? _block(context, item)
-                      : CommitField(
-                          key: Key('screen-$page-${item.index}'),
-                          width: double.infinity,
-                          value: item.text,
-                          onCommit: (v) => apply(
-                            (t) => replaceScreenItem(t, page, item.index, v),
-                          ),
-                        ),
+                      : (_asText.contains(item.index) ? null : _fields(item)) ??
+                            CommitField(
+                              key: Key('screen-$page-${item.index}'),
+                              width: double.infinity,
+                              value: item.text,
+                              onCommit: (v) => apply(
+                                (t) =>
+                                    replaceScreenItem(t, page, item.index, v),
+                              ),
+                            ),
                 ),
+                if (!item.multiline && _fields(item) != null)
+                  IconButton(
+                    key: Key('screen-mode-${item.index}'),
+                    tooltip: _asText.contains(item.index)
+                        ? 'Montrer les champs'
+                        : 'Écrire en texte',
+                    visualDensity: VisualDensity.compact,
+                    isSelected: _asText.contains(item.index),
+                    icon: const Icon(Icons.code, size: 18),
+                    onPressed: () => setState(() {
+                      if (!_asText.remove(item.index)) _asText.add(item.index);
+                    }),
+                  ),
                 IconButton(
                   key: Key('screen-up-${item.index}'),
                   tooltip: 'Monter',
@@ -201,6 +233,303 @@ class ScreenForm extends StatelessWidget {
               child: const Text('Dans le texte'),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// --- Les champs de chaque instruction ---
+
+enum _Kind { integer, text, color }
+
+class _Param {
+  const _Param(this.key, this.kind, {this.required = false, this.width = 64});
+
+  final String key;
+  final _Kind kind;
+  final bool required;
+  final double width;
+}
+
+/// Les paramètres des instructions qui s'écrivent `nom: {clé: valeur, ...}`.
+const _mapParams = <String, List<_Param>>{
+  'position': [
+    _Param('ligne', _Kind.integer, required: true),
+    _Param('col', _Kind.integer, required: true),
+  ],
+  'deplace': [_Param('ligne', _Kind.integer), _Param('col', _Kind.integer)],
+  'couleur': [_Param('texte', _Kind.color), _Param('fond', _Kind.color)],
+  'repete': [
+    _Param('caractere', _Kind.text, required: true, width: 80),
+    _Param('nombre', _Kind.integer, required: true),
+  ],
+  'rectangle': [
+    _Param('ligne', _Kind.integer, required: true),
+    _Param('col', _Kind.integer, required: true),
+    _Param('largeur', _Kind.integer, required: true),
+    _Param('hauteur', _Kind.integer, required: true),
+    _Param('couleur', _Kind.color, required: true),
+  ],
+  'paragraphe': [
+    _Param('valeur', _Kind.text, required: true, width: 200),
+    _Param('ligne', _Kind.integer, required: true),
+    _Param('hauteur', _Kind.integer, required: true),
+    _Param('col', _Kind.integer),
+    _Param('largeur', _Kind.integer),
+    _Param('couleur', _Kind.color),
+  ],
+};
+
+/// Les instructions sans paramètre.
+const _bare = {
+  'efface',
+  'effacefindeligne',
+  'doublehauteur',
+  'doublelargeur',
+  'doubletaille',
+  'taillenormale',
+  'graphique',
+  'texte',
+  'date',
+  'heure',
+  'init',
+};
+
+/// Les instructions qui prennent un mot parmi quelques-uns.
+const _choices = <String, List<String>>{
+  'souligne': ['actif', 'inactif'],
+  'clignote': ['actif', 'inactif'],
+  'inversion': ['actif', 'inactif'],
+  'curseur': ['visible', 'invisible'],
+};
+
+/// Les instructions qui prennent un texte.
+const _texts = {'ecrit': 'Texte', 'affiche': 'Fichier'};
+
+final _number = RegExp(r'^[+-]?\d+$');
+
+extension on _ScreenFormState {
+  /// Les champs de l'instruction [item], ou `null` si on ne sait pas les
+  /// montrer (macro, octets, forme inhabituelle) : on écrit alors le texte.
+  Widget? _fields(ScreenItem item) {
+    final name = item.name;
+    Object? value;
+    try {
+      value = loadYaml(item.text);
+    } on YamlException {
+      return null;
+    }
+    final label = SizedBox(
+      width: 110,
+      child: Text(
+        name,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      ),
+    );
+    Widget row(List<Widget> children) => Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [label, ...children],
+    );
+    if (_bare.contains(name) && value is String) return row(const []);
+    final choices = _choices[name];
+    if (choices != null && value is YamlMap && value.length == 1) {
+      return row([
+        Pick(
+          key: Key('screen-$page-${item.index}-$name'),
+          width: 120,
+          value: '${value[name]}',
+          items: {for (final c in choices) c: c},
+          onChanged: (v) =>
+              apply((t) => replaceScreenItem(t, page, item.index, '$name: $v')),
+        ),
+      ]);
+    }
+    final textLabel = _texts[name];
+    if (textLabel != null && value is YamlMap && value.length == 1) {
+      return row([
+        SizedBox(
+          width: 320,
+          child: CommitField(
+            key: Key('screen-$page-${item.index}-$name'),
+            width: double.infinity,
+            label: textLabel,
+            value: '${value[name] ?? ''}',
+            onCommit: (v) => apply(
+              (t) => replaceScreenItem(
+                t,
+                page,
+                item.index,
+                '$name: ${yamlString(v)}',
+              ),
+            ),
+          ),
+        ),
+      ]);
+    }
+    final params = _mapParams[name];
+    if (params != null &&
+        value is YamlMap &&
+        value.length == 1 &&
+        value[name] is YamlMap &&
+        (value[name] as YamlMap).style == CollectionStyle.FLOW) {
+      final map = value[name] as YamlMap;
+      return row([for (final p in params) _param(item, name, map, p)]);
+    }
+    return null;
+  }
+
+  Widget _param(ScreenItem item, String name, YamlMap map, _Param p) {
+    final key = Key('screen-$page-${item.index}-${p.key}');
+    final current = map[p.key] == null ? '' : '${map[p.key]}';
+    bool write(Object? v) =>
+        apply((t) => setScreenParam(t, page, item.index, name, p.key, v));
+    if (p.kind == _Kind.color) {
+      return ColorPick(
+        key: key,
+        label: p.key,
+        value: current,
+        required: p.required,
+        onChanged: (v) => write(v.isEmpty ? null : v),
+      );
+    }
+    return CommitField(
+      key: key,
+      width: p.width,
+      label: p.key,
+      value: current,
+      onCommit: (v) {
+        final text = v.trim();
+        if (text.isEmpty) return p.required ? false : write(null);
+        if (p.kind == _Kind.integer) {
+          return write(_number.hasMatch(text) ? int.parse(text) : text);
+        }
+        return write(v);
+      },
+    );
+  }
+}
+
+/// Demande l'instruction à ajouter : on tape les premières lettres de son nom,
+/// la liste se réduit, Entrée prend la première, ou on clique. Rend le texte de
+/// l'instruction avec ses valeurs par défaut, ou `null` si on annule.
+Future<String?> askInstruction(BuildContext context) => showDialog<String>(
+  context: context,
+  builder: (context) => const _InstructionDialog(),
+);
+
+/// Les instructions de [screenPalette] qui conviennent à [query] : celles dont le
+/// nom commence par la saisie d'abord, puis celles dont le nom ou la description
+/// la contiennent. Sans saisie, toutes, dans l'ordre de la palette.
+List<(String, String)> matchingInstructions(String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return screenPalette;
+  String name((String, String) e) => e.$1.split(' — ').first.toLowerCase();
+  return [
+    for (final e in screenPalette)
+      if (name(e).startsWith(q)) e,
+    for (final e in screenPalette)
+      if (!name(e).startsWith(q) && e.$1.toLowerCase().contains(q)) e,
+  ];
+}
+
+class _InstructionDialog extends StatefulWidget {
+  const _InstructionDialog();
+
+  @override
+  State<_InstructionDialog> createState() => _InstructionDialogState();
+}
+
+class _InstructionDialogState extends State<_InstructionDialog> {
+  final _query = TextEditingController();
+  int _chosen = 0;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  List<(String, String)> get _matches => matchingInstructions(_query.text);
+
+  void _move(int delta) {
+    final n = _matches.length;
+    if (n > 0) setState(() => _chosen = (_chosen + delta).clamp(0, n - 1));
+  }
+
+  void _pick(int i) {
+    final matches = _matches;
+    if (i >= 0 && i < matches.length) Navigator.pop(context, matches[i].$2);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = _matches;
+    final scheme = Theme.of(context).colorScheme;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 460),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyUpEvent) return KeyEventResult.ignored;
+                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    _move(1);
+                    return KeyEventResult.handled;
+                  }
+                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                    _move(-1);
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  key: const Key('instruction-filter'),
+                  controller: _query,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Tapez le début du nom de l\'instruction',
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() => _chosen = 0),
+                  onSubmitted: (_) => _pick(_chosen),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: matches.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('Aucune instruction ne commence ainsi.'),
+                      )
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (var i = 0; i < matches.length; i++)
+                            ListTile(
+                              key: Key(
+                                'instruction-${matches[i].$1.split(' — ').first}',
+                              ),
+                              dense: true,
+                              selected: i == _chosen,
+                              selectedTileColor: scheme.primaryContainer,
+                              selectedColor: scheme.onPrimaryContainer,
+                              title: Text(matches[i].$1),
+                              onTap: () => _pick(i),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

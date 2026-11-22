@@ -38,7 +38,7 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 
 ## Écran (suite de l'étape 7b)
 
-- [ ] **Un formulaire par instruction** : champs numériques pour `ligne` / `col`, liste des couleurs, bascule actif / inactif, au lieu du texte libre.
+- [ ] **Formulaire des instructions `macro` et `octets`** (aujourd'hui en texte libre) : nom de la macro en liste, un champ par argument.
 - [ ] **Les macros dans le menu d'ajout** (avec leurs arguments), et l'édition des blocs `si` et `fois`.
 - [ ] **Écran écrit en ligne** (`ecran: [efface]`) : le convertir en liste pour pouvoir le modifier.
 - [ ] **Montrer sur le rendu** l'instruction choisie dans la liste (et inversement), préparation de l'étape 9.

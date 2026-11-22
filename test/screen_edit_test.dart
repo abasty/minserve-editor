@@ -156,4 +156,34 @@ void main() {
     final r = replaceScreenItem(t, 'accueil', 2, 'ecrit: "Salut"');
     expect(r, contains('- ecrit: "Salut"\n\n'));
   });
+
+  test('écrire et retirer un paramètre', () {
+    var t = setScreenParam(_service, 'accueil', 1, 'position', 'ligne', 10);
+    expect(t, contains('- position: {ligne: 10, col: 5}'));
+    // Un texte qui n'est pas un entier est refusé par le serveur.
+    expect(
+      () => setScreenParam(t, 'accueil', 1, 'position', 'col', 'x'),
+      throwsA(isA<EditException>()),
+    );
+    // Une clé nouvelle va à la fin ; la retirer laisse une table propre.
+    t = replaceScreenItem(t, 'accueil', 0, 'couleur: {texte: blanc}');
+    t = setScreenParam(t, 'accueil', 0, 'couleur', 'fond', 'rouge');
+    expect(t, contains('- couleur: {texte: blanc, fond: rouge}'));
+    t = setScreenParam(t, 'accueil', 0, 'couleur', 'texte', null);
+    expect(t, contains('- couleur: {fond: rouge}'));
+    // Une table vide, ou une valeur refusée par le serveur, est refusée.
+    expect(
+      () => setScreenParam(t, 'accueil', 0, 'couleur', 'fond', null),
+      throwsA(isA<EditException>()),
+    );
+    expect(
+      () => setScreenParam(t, 'accueil', 1, 'position', 'ligne', 99),
+      throwsA(isA<EditException>()),
+    );
+    // Un bloc ou une forme qui n'est pas une table en ligne : refus.
+    expect(
+      () => setScreenParam(t, 'accueil', 3, 'si', 'x', 1),
+      throwsA(isA<EditException>()),
+    );
+  });
 }

@@ -892,3 +892,60 @@ String moveScreenItem(String text, String page, int index, int delta) {
   s.lines.replaceRange(aStart, bEnd + 1, [...gap, ...second, ...first]);
   return _checked(s.lines.join('\n'));
 }
+
+/// Écrit le paramètre [key] de l'instruction [index] de l'écran de [page], par
+/// exemple `ligne` de `position: {ligne: 3, col: 5}` ([name] est `position`).
+/// [value] à `null` retire le paramètre. Seules les tables écrites en ligne
+/// (`{...}`) se modifient ainsi ; le reste du texte ne change pas.
+String setScreenParam(
+  String text,
+  String page,
+  int index,
+  String name,
+  String key,
+  Object? value,
+) {
+  _requireValid(text);
+  final path = ['pages', page, 'ecran', index, name];
+  final map = valueAt(text, path);
+  if (map is! YamlMap || map.style != CollectionStyle.FLOW) {
+    throw EditException(
+      'Cette instruction n\'est pas écrite en ligne : modifiez-la dans le texte.',
+    );
+  }
+  final e = YamlEditor(text);
+  if (value == null) {
+    if (!map.containsKey(key)) return text;
+    e.remove([...path, key]);
+    return _checked(_tidyFlow(e.toString(), path));
+  }
+  if (!map.containsKey(key)) {
+    // À la fin de la table : yaml_edit rangerait la clé par ordre alphabétique.
+    final end = map.span.end.offset - 1;
+    final out = text.replaceRange(end, end, ', $key: ${_flowScalar(value)}');
+    return _checked(out);
+  }
+  e.update([...path, key], value);
+  return _checked(e.toString());
+}
+
+/// Une valeur écrite dans une table en ligne : un nombre tel quel, un mot sans
+/// guillemets s'il se lit comme une chaîne, sinon entre guillemets.
+String _flowScalar(Object value) {
+  if (value is num) return '$value';
+  final text = '$value';
+  return RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(text) &&
+          !const {
+            'true',
+            'false',
+            'null',
+            'yes',
+            'no',
+            'on',
+            'off',
+            'y',
+            'n',
+          }.contains(text)
+      ? text
+      : yamlString(text);
+}
