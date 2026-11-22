@@ -371,6 +371,13 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    séparés par une poignée ; « Graphe » ramène au graphe, centré sur la page.
 7. **L'aperçu d'un morceau**, les données de test, l'édition de l'`ecran` en liste
    d'instructions avec aperçu.
+   - **7a — Données de test des variables (faite)** : en mode page, le bouton « Données de test »
+     ouvre un panneau à droite du rendu avec une valeur par variable `${nom}` citée dans la page,
+     puis dans le reste du service, plus des variables ajoutées à la main. Le rendu en tient
+     compte à chaque frappe. Les valeurs restent en mémoire (pas dans le `service.yaml`). Les
+     `donnees` de la page ne sont pas chargées.
+   - 7b — L'`ecran` en liste d'instructions (réordonner, insérer, paramètres).
+   - 7c — L'aperçu d'un morceau (macro avec arguments de test, bloc `fois`).
 8. **Les mingets** : forme étendue côté serveur, palette, formulaire d'appel, extraction,
    bibliothèque.
 9. **Édition directe sur l'aperçu** (§5.3).

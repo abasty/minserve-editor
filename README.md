@@ -13,7 +13,7 @@ vue d'ensemble. L'éditeur est là pour la retrouver.
 > pages, transitions, impasses, pages inaccessibles, liens globaux, recherche, et « Aller au
 > texte » depuis une page. Le graphe **modifie le texte** : créer, renommer et supprimer une
 > page, ajouter et retirer une transition (les autres lignes, commentaires compris, restent
-> telles quelles). **Rendu** de la page sur un écran Minitel (émulateur de Minterm), mis à jour à chaque modification ; un **double clic** sur une page (ou le bouton « Ouvrir ») l’ouvre en grand à la place du graphe : rendu en haut, propriétés en bas. **Formulaires de page** (règles, saisie, accès) : chaque champ ne réécrit que sa clé. Les volets (texte / graphe, graphe / panneau de page) se **redimensionnent en tirant leur poignée**. **Défaire / refaire** (boutons ou Ctrl+Z, Ctrl+Y) valent pour la frappe comme
+> telles quelles). **Rendu** de la page sur un écran Minitel (émulateur de Minterm), mis à jour à chaque modification ; un **double clic** sur une page (ou le bouton « Ouvrir ») l’ouvre en grand à la place du graphe : rendu en haut, propriétés en bas. Un panneau de **données de test** donne des valeurs aux variables `${nom}` pour voir la page remplie. **Formulaires de page** (règles, saisie, accès) : chaque champ ne réécrit que sa clé. Les volets (texte / graphe, graphe / panneau de page) se **redimensionnent en tirant leur poignée**. **Défaire / refaire** (boutons ou Ctrl+Z, Ctrl+Y) valent pour la frappe comme
 > pour le graphe. On enregistre par un téléchargement.
 
 ## Ce que l'éditeur doit faire

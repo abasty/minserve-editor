@@ -72,6 +72,7 @@ class PagePreview extends StatelessWidget {
     this.large = false,
     this.color = false,
     this.onColorChanged,
+    this.variables = const {},
   });
 
   final Service service;
@@ -85,11 +86,14 @@ class PagePreview extends StatelessWidget {
   final bool color;
   final ValueChanged<bool>? onColorChanged;
 
+  /// Les valeurs de test des variables `${nom}`.
+  final Map<String, String> variables;
+
   @override
   Widget build(BuildContext context) {
     final servicePage = service.pages[page];
     if (servicePage == null) return const SizedBox.shrink();
-    final data = renderPreview(service, servicePage);
+    final data = renderPreview(service, servicePage, variables: variables);
     final theme = Theme.of(context);
     final palette = color ? MinColors : MinGrey;
     final toggle = onColorChanged == null
@@ -121,8 +125,8 @@ class PagePreview extends StatelessWidget {
             key: const Key('preview-missing'),
           ),
         Text(
-          'Les données de la page (messages, compteurs…) et les '
-          'variables ne sont pas chargées : leurs valeurs restent vides.',
+          'Les données de la page (messages, compteurs…) ne sont pas '
+          'chargées. Les variables prennent les valeurs des données de test.',
           style: theme.textTheme.bodySmall,
         ),
       ],

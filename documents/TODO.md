@@ -30,7 +30,7 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 
 - [ ] **Clignotement** des caractères dans l'aperçu (aujourd'hui, ils sont affichés fixes).
 - [ ] **Fichiers `affiche`** : les montrer (choisir le dossier `assets` du service, ou les glisser dans l'éditeur).
-- [ ] **Données de test** (variables, messages, compteurs) pour voir la page remplie (étape 7).
+- [ ] **Données de test, suite** : les variables sont faites (étape 7a) ; restent les `donnees` de la page (messages, compteurs, données personnelles), l'utilisateur connecté, et garder le jeu de test d'une session à l'autre (aujourd'hui, en mémoire).
 - [ ] **Incorporer un fichier `.vdt` au `service.yaml`** (une fois les assets accessibles) : soit en liste d'instructions `ecran` (désassembleur du cœur, comme `tool/vdt2yaml.dart`), soit en gardant sa **suite d'octets telle quelle**, sans décompilation ; éventuellement sous forme de macro. Confirmation avant de remplacer l'`affiche`.
 - [ ] **Texte limité à la page** : en mode page, ne montrer dans l'éditeur de texte que le YAML de la page ouverte (avec un lien « Tout le texte »). À décider selon l'usage.
 - [ ] La lettre `F` en haut à droite (ligne 00) est celle d'un terminal non connecté : peut-être la masquer dans l'aperçu.

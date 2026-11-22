@@ -6,6 +6,7 @@ import 'package:minserve_core/minserve_core.dart' show Service;
 import '../split_handle.dart';
 import 'graph_dialogs.dart';
 import '../preview/page_preview.dart';
+import '../preview/test_data.dart';
 import 'page_forms.dart';
 import 'layout.dart';
 import 'service_edit.dart';
@@ -71,6 +72,10 @@ class _GraphPanelState extends State<GraphPanel> {
 
   /// Aperçu en couleur ou en niveaux de gris (par défaut).
   bool _previewColor = false;
+
+  /// Le panneau des données de test est ouvert ; leurs valeurs (variables).
+  bool _dataOpen = false;
+  final Map<String, String> _testVars = {};
 
   /// Le dernier clic sur un nœud, pour reconnaître le double clic sans
   /// retarder le clic simple.
@@ -351,11 +356,19 @@ class _GraphPanelState extends State<GraphPanel> {
         if (open != null && widget.service != null) ...[
           _pageBar(open),
           Expanded(
-            child: PagePreview(
-              service: widget.service!,
-              page: open,
-              large: true,
-              color: _previewColor,
+            child: Row(
+              children: [
+                Expanded(
+                  child: PagePreview(
+                    service: widget.service!,
+                    page: open,
+                    large: true,
+                    color: _previewColor,
+                    variables: _testVars,
+                  ),
+                ),
+                if (_dataOpen) _testPanel(open),
+              ],
             ),
           ),
           SplitHandle(
@@ -421,6 +434,28 @@ class _GraphPanelState extends State<GraphPanel> {
     );
   }
 
+  Widget _testPanel(String page) {
+    final text = widget.editing?.text();
+    final names = text == null
+        ? (here: const <String>[], elsewhere: const <String>[])
+        : variablesFor(text, page);
+    return SizedBox(
+      width: 280,
+      child: TestDataPanel(
+        here: names.here,
+        elsewhere: names.elsewhere,
+        values: _testVars,
+        onChanged: (name, value) => setState(() {
+          if (value == null) {
+            _testVars.remove(name);
+          } else {
+            _testVars[name] = value;
+          }
+        }),
+      ),
+    );
+  }
+
   Widget _pageBar(String name) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
@@ -434,6 +469,14 @@ class _GraphPanelState extends State<GraphPanel> {
           ),
           Text('Page « $name »', style: Theme.of(context).textTheme.titleSmall),
           const Spacer(),
+          IconButton(
+            key: const Key('test-data-toggle'),
+            tooltip: 'Données de test (variables)',
+            isSelected: _dataOpen,
+            icon: const Icon(Icons.tune),
+            selectedIcon: const Icon(Icons.tune, fill: 1),
+            onPressed: () => setState(() => _dataOpen = !_dataOpen),
+          ),
           IconButton(
             key: const Key('preview-colors'),
             tooltip: _previewColor
@@ -749,6 +792,7 @@ class _GraphPanelState extends State<GraphPanel> {
                   page: name,
                   color: _previewColor,
                   onColorChanged: (v) => setState(() => _previewColor = v),
+                  variables: _testVars,
                 )
               else if (editing != null && tab == _PageTab.access)
                 AccessForm(
