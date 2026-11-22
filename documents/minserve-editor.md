@@ -493,3 +493,90 @@ définitions à l'éditeur.
 | Les dépendances par chemin empêchent de compiler sur GitHub. | Passer à `git:` avant la première publication (§4.2). |
 | Flutter web : taille et temps de chargement ; clavier et sélecteurs de fichiers selon le navigateur. | Compiler tôt (`flutter build web`), tester Chrome et Firefox dès l'étape 2. |
 | L'émulateur de Minterm évolue pendant l'extraction. | Faire l'étape 6 d'un seul tenant, avec les tests de Minterm. |
+
+## 11. L'application Desktop (Linux)
+
+Le même code Flutter compile en application Linux (`flutter build linux`, dossier `linux/`) ; ça marche
+déjà. Le but est d'en faire une vraie application de bureau, sans diverger du code web : **une seule base
+de code**, les différences vivent derrière de petites interfaces choisies au démarrage (`kIsWeb`), comme
+`FileAccess` (§4.3). Le code propre au bureau (`dart:io`) va dans des fichiers à part, importés
+conditionnellement, pour ne rien casser du build web.
+
+### 11.1 Fichier du service (D1)
+
+Aujourd'hui : « Ouvrir » (sélecteur) et « Enregistrer » (boîte « Enregistrer sous » à chaque fois, puisque
+le web ne sait que télécharger). Sur Linux :
+
+- une `DesktopFileAccess` qui **garde le chemin** du fichier ouvert : « Enregistrer » (Ctrl+S) réécrit le
+  fichier en place, sans boîte ; « Enregistrer sous… » reste disponible ;
+- écriture **atomique** (fichier temporaire puis renommage) pour ne jamais laisser un `service.yaml`
+  tronqué ;
+- **ouvrir en ligne de commande** (`minserve_editor service.yaml`, `main(List<String> args)`) et, plus
+  tard, association de fichier (`.desktop`) ;
+- **fichiers récents** et dernier service rouvert au lancement (petit fichier de réglages dans
+  `~/.config/minserve-editor/`) ;
+- **titre de la fenêtre** : nom du fichier et `•` si modifié ;
+- **confirmation à la fermeture** si des modifications ne sont pas enregistrées (interception de la
+  demande de fermeture de la fenêtre) ;
+- **détecter une modification extérieure** (on édite aussi le fichier avec un autre éditeur ou on le
+  change par git) : surveiller le fichier ; si le texte de l'éditeur n'a pas été modifié, recharger ; sinon
+  proposer « recharger » ou « garder ma version » ; ne jamais écraser en silence.
+
+Le mode « dossier local » du §4.3 (File System Access) devient sans objet sur Linux : c'est ce qu'on fait ici.
+
+### 11.2 Les assets (D2)
+
+Le dossier des assets est **choisi par la configuration du serveur** (`config.assets`), pas forcément à
+côté du `service.yaml` : l'éditeur a son propre réglage, **`assets/` à côté du service par défaut**, modifiable
+et mémorisé par service. Le serveur impose des règles que l'éditeur applique de la même façon (chemin
+relatif avec `/`, rien hors du dossier liens symboliques résolus, 256 Ko au plus).
+
+- brancher `AssetReader` de `renderPage` sur le dossier : l'aperçu montre enfin les `affiche` (il rend
+  aujourd'hui des octets vides) ;
+- **liste des assets** et choix d'un fichier dans le formulaire de l'instruction `affiche` (aujourd'hui un
+  champ texte), avec aperçu du `.vdt` ;
+- instruction `affiche` avec un chemin introuvable : signalé dans l'éditeur comme le fait le serveur au
+  démarrage (`checkAssets`) ;
+- **glisser-déposer** d'un fichier dans l'éditeur : copie dans `assets/`, avec refus d'écraser sans
+  confirmation ;
+- plus tard (TODO) : incorporer un `.vdt` au `service.yaml` (désassemblage en `ecran`, ou suite d'octets
+  telle quelle).
+
+Dans le navigateur, les assets restent à faire par « choisir / glisser » (TODO) : même code d'aperçu, source
+différente derrière `AssetReader`.
+
+### 11.3 Autres idées pour le bureau (à trier)
+
+Classées de la plus utile à la plus lourde ; aucune n'est décidée.
+
+1. **Données de test depuis le disque** : lire les vrais fichiers ou la base SQLite d'une page `donnees`
+   pour l'aperçu, plutôt que des valeurs saisies. Tout exécutable (`exec`) resterait **désactivé par défaut**,
+   à autoriser explicitement par service, avec la même politique `exec.allow` que le serveur.
+2. **Contrôle du service avec le vrai serveur** : lancer la validation de `minserve` (`checkAssets`, règles
+   `exec`, base SQLite) sur le fichier et afficher les erreurs dans l'éditeur ; plus fidèle que le seul
+   `Service.parseString`.
+3. **Lancer le service** : démarrer Minserve sur le fichier courant (processus enfant, port local) et
+   l'essayer **dans Minterm ou dans le navigateur** ; arrêt et rechargement à l'enregistrement.
+4. **Envoyer l'aperçu vers un vrai Minitel** par un port série (ce que fait déjà Minterm).
+5. **Exporter une page ou un minget** en `.vdt`, ou en image, depuis l'aperçu.
+6. **Dossier de travail** : ouvrir un dossier (service + assets + bibliothèque de mingets personnelle,
+   §8 étape 8e-2, rangée dans `~/.config` plutôt que dans le navigateur).
+7. **Git** : indiquer les fichiers modifiés, annuler vers la version commitée. À reconsidérer : l'éditeur
+   de texte du dépôt fait déjà ça très bien.
+
+À écarter pour l'instant : un « mode multi-fenêtres » et un gestionnaire d'extensions.
+
+### 11.4 Étapes
+
+1. **D0, mise en ordre** : committer `linux/` ; rétablir dans `.metadata` l'entrée de la plateforme
+   `web` (écrasée par `flutter create`) ; `linux/**` exclu de l'analyse (déjà fait) ; titre de fenêtre
+   (`my_application.cc`) et nom du paquet ; documenter la construction (`flutter build linux`) et vérifier
+   que `deploy-editor.sh` (web) n'est pas touché ; choisir le moyen de distribution (archive `tar.gz` du
+   dossier `bundle/`, puis éventuellement AppImage ou `.deb`).
+2. **D1, fichier en place** (§11.1), sans les fichiers récents ni la surveillance (D1b ensuite).
+3. **D2, assets** (§11.2) : lecture et aperçu d'abord, puis liste / choix dans le formulaire, puis glisser-déposer.
+4. **D3, choix parmi §11.3**, selon l'envie.
+
+Les étapes D se glissent entre les étapes 8 et 9 du §8 selon l'envie ; D1 et D2 n'ont aucune dépendance avec les
+mingets. Tests : `DesktopFileAccess` se teste avec un dossier temporaire (pas d'interface graphique) ; le
+reste réutilise les doubles `FakeFiles` existants.
