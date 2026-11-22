@@ -422,7 +422,18 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      `- macro: [nom, args...]` en **omettant les derniers arguments qui valent le défaut** (`macroCallText`).
      Un appel déjà écrit se montre dans l'onglet Écran avec son nom et un champ par paramètre (les omis avec leur
      valeur par défaut) ; modifier un champ réécrit l'appel, raccourci si possible.
-   - 8d — Extraire des instructions en minget, mettre à jour les usages.
+   - **8d — Extraire en minget, voir les usages (faite)** : dans l'onglet Écran, le numéro de chaque
+     instruction se coche (il devient une pastille pleine) ; pour une suite de lignes cochées, « Extraire en
+     minget » ouvre une boîte (`extract_dialog.dart`) : nom, description, et la liste des valeurs qui peuvent
+     varier (entiers et textes des instructions en ligne, texte d'un `ecrit` ; `extractableValues`), chacune avec
+     une case et un nom de paramètre proposé d'après sa clé. `extractMinget` écrit la macro en forme étendue (le
+     corps garde les lignes d'origine, chaque valeur choisie devient `$n`, sa valeur actuelle le `defaut`),
+     la place à la suite des autres macros (ou avant `pages:`), remplace les instructions par
+     `macro: [nom]` et vérifie que la page envoie les mêmes octets avant et après. Les blocs `si` et `fois`
+     sont déplacés tels quels (leurs valeurs ne sont pas proposées). Dans le panneau Mingets, « Appelé par »
+     liste les pages et les macros qui l'appellent (avec leur nombre) ; toucher une page l'ouvre sur l'onglet
+     Écran, une macro la choisit. Comme le serveur développe les macros au chargement, modifier une définition
+     met déjà tous ses appels à jour : aucune réécriture n'est nécessaire.
    - 8e — La bibliothèque de mingets.
 9. **Édition directe sur l'aperçu** (§5.3).
 

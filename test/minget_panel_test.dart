@@ -239,4 +239,50 @@ pages:
     expect(find.byKey(const Key('minget-vieille')), findsNothing);
     expect(find.text('Choisissez un minget.'), findsOneWidget);
   });
+
+  testWidgets('qui appelle ce minget : pages et macros, avec un lien', (
+    tester,
+  ) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), r'''
+debut: a
+macros:
+  trait:
+    - position: {ligne: 1, col: 1}
+  double:
+    - macro: [trait]
+pages:
+  a:
+    ecran:
+      - macro: [trait]
+      - macro: [trait]
+      - macro: [double]
+''');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('open-mingets')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minget-trait')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('used-by-page a')), findsOneWidget);
+    expect(find.text('page a ×2'), findsOneWidget);
+    expect(find.byKey(const Key('used-by-macro double')), findsOneWidget);
+    // Un minget que personne n'appelle.
+    await tester.tap(find.byKey(const Key('minget-double')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('used-by-page a')), findsOneWidget);
+    // Toucher une macro appelante la choisit.
+    await tester.tap(find.byKey(const Key('minget-trait')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('used-by-macro double')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('preview-caption'))).data,
+      'Minget « double »',
+    );
+    // Toucher une page l'ouvre en grand, sur l'onglet Écran.
+    await tester.tap(find.byKey(const Key('used-by-page a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+    expect(find.byKey(const Key('screen-a-0-macro-name')), findsOneWidget);
+  });
 }

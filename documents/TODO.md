@@ -42,3 +42,10 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 - [ ] **Les macros dans le menu d'ajout** (avec leurs arguments), et l'édition des blocs `si` et `fois`.
 - [ ] **Écran écrit en ligne** (`ecran: [efface]`) : le convertir en liste pour pouvoir le modifier.
 - [ ] **Montrer sur le rendu** l'instruction choisie dans la liste (et inversement), préparation de l'étape 9.
+
+## Mingets (suite de l'étape 8)
+
+- [ ] **Remplacer aussi les suites identiques** : après une extraction, chercher dans les autres pages les suites d'instructions identiques à la sélection (aux valeurs près) et proposer de les remplacer par l'appel, avec leurs propres valeurs.
+- [ ] **Paramètres des `si` et `fois`** dans l'extraction (aujourd'hui, ces blocs sont déplacés tels quels, sans valeur proposée).
+- [ ] **Éditer la définition d'un minget** depuis le panneau (ajouter, retirer ou renommer un paramètre, changer ses bornes) en mettant les appels à jour.
+

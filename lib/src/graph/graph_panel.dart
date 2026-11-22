@@ -358,6 +358,13 @@ class _GraphPanelState extends State<GraphPanel> {
         text: widget.editing?.text(),
         onBack: () => setState(() => _mingetsOpen = false),
         onGoToMacro: widget.onGoToMacro,
+        onOpenPage: (page) => setState(() {
+          _mingetsOpen = false;
+          _selected = page;
+          _open = page;
+          _instr = null;
+          _tab = _PageTab.screen;
+        }),
         editing: widget.editing,
         color: _previewColor,
         onColorChanged: (v) => setState(() => _previewColor = v),

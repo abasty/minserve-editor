@@ -44,6 +44,7 @@ Future<void> open(WidgetTester tester) async {
 }
 
 void main() {
+  extractTests();
   final macros = Service.parseString(_service).macros;
 
   test('écrire un appel : les derniers arguments par défaut sont omis', () {
@@ -148,5 +149,89 @@ void main() {
     await tester.tap(gras);
     await tester.pumpAndSettle();
     expect(codeText(tester), contains('- macro: [trait, 9, "salut", true]'));
+  });
+}
+
+const _extractService = r'''
+debut: a
+pages:
+  a:
+    ecran:
+      - efface
+      - position: {ligne: 3, col: 5}
+      - ecrit: "Menu"
+      - ecrit: "fin"
+''';
+
+Future<void> openExtract(WidgetTester tester) async {
+  await pumpEditor(tester, FakeFiles());
+  await tester.enterText(find.byKey(const Key('code')), _extractService);
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.byKey(const Key('node-a')));
+  await tester.pump();
+  final tab = find.descendant(
+    of: find.byKey(const Key('page-tabs')),
+    matching: find.text('Écran'),
+  );
+  await tester.ensureVisible(tab);
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
+}
+
+Future<void> check(WidgetTester tester, int i) async {
+  final f = find.byKey(Key('screen-check-$i'));
+  await tester.ensureVisible(f);
+  await tester.tap(f);
+  await tester.pumpAndSettle();
+}
+
+void extractTests() {
+  testWidgets('extraire en minget : sélection, paramètres, résultat', (
+    tester,
+  ) async {
+    await openExtract(tester);
+    expect(find.byKey(const Key('screen-extract')), findsNothing);
+    // Deux instructions qui ne se suivent pas : on le dit.
+    await check(tester, 1);
+    await check(tester, 3);
+    expect(find.byKey(const Key('screen-extract-hint')), findsOneWidget);
+    expect(find.byKey(const Key('screen-extract')), findsNothing);
+    await check(tester, 3);
+    await check(tester, 2);
+    final button = find.byKey(const Key('screen-extract'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    // Le nom est nécessaire ; les valeurs se cochent.
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('dialog-ok'))).onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byKey(const Key('extract-name')), 'titre');
+    await tester.tap(find.byKey(const Key('extract-use-0')));
+    await tester.tap(find.byKey(const Key('extract-use-2')));
+    await tester.pumpAndSettle();
+    // Deux paramètres de même nom : refusé.
+    await tester.enterText(find.byKey(const Key('extract-pname-2')), 'ligne');
+    await tester.pumpAndSettle();
+    expect(find.text('Déjà utilisé'), findsWidgets);
+    await tester.enterText(find.byKey(const Key('extract-pname-2')), 'texte');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    final text = codeText(tester);
+    expect(
+      text,
+      contains('- efface\n      - macro: [titre]\n      - ecrit: "fin"'),
+    );
+    expect(text, contains(r'- position: {ligne: $1, col: 5}'));
+    expect(text, contains(r'- ecrit: "$2"'));
+    final s = Service.parseString(text);
+    expect(s.macros['titre']!.parameters.map((p) => p.name), [
+      'ligne',
+      'texte',
+    ]);
+    // L'appel s'affiche avec ses champs.
+    expect(find.byKey(const Key('screen-a-1-macro-name')), findsOneWidget);
   });
 }

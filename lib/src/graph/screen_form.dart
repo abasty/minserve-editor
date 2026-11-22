@@ -5,6 +5,7 @@ import 'package:minserve_core/minserve_core.dart'
 import 'package:yaml/yaml.dart';
 
 import 'color_pick.dart';
+import 'extract_dialog.dart';
 import 'macro_call.dart';
 import 'minget_panel.dart' show mingetParamTypes;
 import 'page_forms.dart';
@@ -87,6 +88,42 @@ class _ScreenFormState extends State<ScreenForm> {
   /// Les instructions qu'on montre en texte plutôt qu'en champs.
   final _asText = <int>{};
 
+  /// Les instructions cochées, pour les extraire en minget.
+  final _checked = <int>{};
+  int _count = -1;
+
+  /// Les cochées forment-elles une suite sans trou ?
+  bool get _contiguous =>
+      _checked.isNotEmpty &&
+      _checked.reduce((a, b) => a > b ? a : b) -
+              _checked.reduce((a, b) => a < b ? a : b) +
+              1 ==
+          _checked.length;
+
+  Future<void> _extract(BuildContext context) async {
+    final from = _checked.reduce((a, b) => a < b ? a : b);
+    final to = _checked.reduce((a, b) => a > b ? a : b);
+    final request = await askExtraction(
+      context,
+      values: extractableValues(text, page, from, to),
+      existing: widget.macros.keys,
+      count: to - from + 1,
+    );
+    if (request == null) return;
+    final done = apply(
+      (t) => extractMinget(
+        t,
+        page,
+        from,
+        to,
+        name: request.name,
+        description: request.description,
+        params: request.params,
+      ),
+    );
+    if (done) setState(_checked.clear);
+  }
+
   Widget _insert(BuildContext context, int at, {required Widget child}) {
     return InkWell(
       key: Key('screen-add-$at'),
@@ -114,6 +151,11 @@ class _ScreenFormState extends State<ScreenForm> {
   @override
   Widget build(BuildContext context) {
     final items = screenItems(text, page);
+    // Le nombre d'instructions a changé : les numéros cochés ne valent plus.
+    if (items.length != _count) {
+      _count = items.length;
+      _checked.clear();
+    }
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,12 +180,38 @@ class _ScreenFormState extends State<ScreenForm> {
               ),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 26,
-                    child: Text(
-                      '${item.index + 1}',
-                      textAlign: TextAlign.right,
-                      style: theme.textTheme.bodySmall,
+                  // Le numéro sert aussi de case à cocher (pour extraire en minget) :
+                  // coché, il devient une pastille pleine.
+                  Tooltip(
+                    message: 'Cocher pour extraire en minget',
+                    child: InkWell(
+                      key: Key('screen-check-${item.index}'),
+                      customBorder: const CircleBorder(),
+                      onTap: () => setState(() {
+                        if (!_checked.remove(item.index)) {
+                          _checked.add(item.index);
+                        }
+                      }),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _checked.contains(item.index)
+                              ? theme.colorScheme.primary
+                              : null,
+                        ),
+                        child: Text(
+                          '${item.index + 1}',
+                          style: _checked.contains(item.index)
+                              ? TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onPrimary,
+                                )
+                              : theme.textTheme.bodySmall,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -227,6 +295,26 @@ class _ScreenFormState extends State<ScreenForm> {
                 ],
               ),
             ),
+          ),
+        if (_checked.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _contiguous
+                ? TextButton.icon(
+                    key: const Key('screen-extract'),
+                    onPressed: () => _extract(context),
+                    icon: const Icon(Icons.widgets_outlined, size: 18),
+                    label: Text(
+                      'Extraire en minget (${_checked.length} '
+                      'instruction${_checked.length > 1 ? 's' : ''})',
+                    ),
+                  )
+                : Text(
+                    'Pour extraire en minget, cochez des instructions qui se '
+                    'suivent.',
+                    key: const Key('screen-extract-hint'),
+                    style: theme.textTheme.bodySmall,
+                  ),
           ),
         _insert(
           context,

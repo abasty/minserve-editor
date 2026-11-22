@@ -86,6 +86,7 @@ class MingetPanel extends StatefulWidget {
     required this.text,
     required this.onBack,
     this.onGoToMacro,
+    this.onOpenPage,
     this.editing,
     this.color = false,
     this.onColorChanged,
@@ -99,6 +100,9 @@ class MingetPanel extends StatefulWidget {
   final String? text;
   final VoidCallback onBack;
   final void Function(String macro)? onGoToMacro;
+
+  /// Ouvre une page (en grand) : un appel du minget y est écrit.
+  final void Function(String page)? onOpenPage;
 
   /// De quoi modifier les macros (renommer, copier, supprimer) ; `null` : lecture
   /// seule.
@@ -371,6 +375,7 @@ class _MingetPanelState extends State<MingetPanel> {
                     ],
                   ),
                   if (m.description != null) Text(m.description!),
+                  _usedBy(m, theme),
                   if (!m.extended)
                     Text(
                       'Macro écrite en liste d\'instructions : ses paramètres '
@@ -395,6 +400,45 @@ class _MingetPanelState extends State<MingetPanel> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Qui appelle ce minget : les pages, les autres macros. Toucher un nom y
+  /// va.
+  Widget _usedBy(MacroDefinition m, ThemeData theme) {
+    final text = widget.text;
+    if (text == null) return const SizedBox.shrink();
+    final counts = <String, int>{};
+    for (final u in macroUses(text, m.name)) {
+      counts[u.where] = (counts[u.where] ?? 0) + 1;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        key: const Key('minget-used-by'),
+        spacing: 6,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('Appelé par :', style: theme.textTheme.labelMedium),
+          if (counts.isEmpty)
+            Text('personne', style: theme.textTheme.bodySmall),
+          for (final e in counts.entries)
+            ActionChip(
+              key: Key('used-by-${e.key}'),
+              visualDensity: VisualDensity.compact,
+              label: Text(e.value > 1 ? '${e.key} ×${e.value}' : e.key),
+              onPressed: switch (e.key.split(' ')) {
+                ['page', final page] when widget.onOpenPage != null =>
+                  () => widget.onOpenPage!(page),
+                ['macro', final macro]
+                    when widget.service.macros.containsKey(macro) =>
+                  () => setState(() => _selected = macro),
+                _ => null,
+              },
+            ),
+        ],
+      ),
     );
   }
 

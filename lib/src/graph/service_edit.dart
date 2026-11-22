@@ -8,6 +8,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:minserve_core/minserve_core.dart';
 import 'package:yaml/yaml.dart';
@@ -1140,4 +1141,271 @@ String duplicateMacro(String text, String from, String to) {
       first.substring(key.span.end.column);
   lines.insertAll(end + 1, block);
   return _checked(lines.join('\n'));
+}
+
+// --- Extraire des instructions en minget ---
+
+/// Une valeur d'une instruction qu'on peut rendre variable en extrayant les
+/// instructions dans une macro : le `12` de `position: {ligne: 12, col: 4}`, le
+/// texte d'un `ecrit`...
+class ExtractValue {
+  const ExtractValue(this.item, this.path, this.value, this.type, this.name);
+
+  /// Le numéro de l'instruction dans l'écran de la page.
+  final int item;
+
+  /// Où est la valeur dans l'instruction : `[position, ligne]` ou `[ecrit]`.
+  final List<String> path;
+  final Object value;
+  final MacroType type;
+
+  /// Le nom proposé pour le paramètre.
+  final String name;
+}
+
+/// Un paramètre choisi pour la macro à créer.
+class ExtractParam {
+  const ExtractParam(this.value, this.name);
+
+  final ExtractValue value;
+  final String name;
+}
+
+/// Les valeurs des instructions [from] à [to] de la page [page] qu'on peut
+/// rendre variables : les entiers et les textes des instructions à paramètres en
+/// ligne, et le texte d'un `ecrit`. Les blocs sur plusieurs lignes (`si`,
+/// `fois`) sont déplacés tels quels : leurs valeurs ne sont pas proposées.
+List<ExtractValue> extractableValues(
+  String text,
+  String page,
+  int from,
+  int to,
+) {
+  final list = YamlEditor(text).parseAt(['pages', page, 'ecran']);
+  if (list is! YamlList || from < 0 || to >= list.length || from > to) {
+    return const [];
+  }
+  final lines = text.split('\n');
+  final found = <(int, List<String>, Object, MacroType, String)>[];
+  for (var i = from; i <= to; i++) {
+    final node = list.nodes[i];
+    if (_contentEnd(node, lines) > node.span.start.line) continue;
+    if (node is! YamlMap || node.length != 1) continue;
+    final key = '${node.keys.first}';
+    final value = node.nodes.values.first;
+    if (value is YamlMap) {
+      for (final e in value.nodes.entries) {
+        final scalar = e.value;
+        if (scalar is! YamlScalar) continue;
+        final v = scalar.value;
+        final k = '${(e.key as YamlNode).value}';
+        if (v is int) {
+          found.add((i, [key, k], v, MacroType.entier, k));
+        } else if (v is String && !v.contains(r'$')) {
+          found.add((i, [key, k], v, MacroType.texte, k));
+        }
+      }
+    } else if (value is YamlScalar &&
+        key == 'ecrit' &&
+        value.value is String &&
+        !(value.value as String).contains(r'$')) {
+      found.add((i, [key], value.value as String, MacroType.texte, 'texte'));
+    }
+  }
+  // Des noms distincts : ligne, ligne2...
+  final used = <String, int>{};
+  return [
+    for (final (i, path, v, type, base) in found)
+      ExtractValue(i, path, v, type, () {
+        final n = (used[base] ?? 0) + 1;
+        used[base] = n;
+        return n == 1 ? base : '$base$n';
+      }()),
+  ];
+}
+
+/// Les octets que le serveur enverrait pour la page [page] de [text] : de quoi
+/// vérifier qu'une réécriture ne change pas ce qu'on voit.
+List<int> _pageBytes(String text, String page) {
+  final service = Service.parseString(text);
+  final w = VideotexWriter();
+  renderScreen(
+    service.pages[page]!.screen,
+    w,
+    assets: (_) => Uint8List(0),
+    now: DateTime(2026, 1, 1, 12),
+    init: service.initScreen,
+  );
+  return w.takeBytes();
+}
+
+/// Extrait les instructions [from] à [to] (comprises) de la page [page] dans une
+/// nouvelle macro [name] : la macro est écrite en forme étendue avec les
+/// [params] choisis (leur valeur actuelle devient leur `defaut`), et les
+/// instructions sont remplacées par son appel. Refuse si l'affichage de la page
+/// changeait.
+String extractMinget(
+  String text,
+  String page,
+  int from,
+  int to, {
+  required String name,
+  String? description,
+  List<ExtractParam> params = const [],
+}) {
+  _requireValid(text);
+  final list = YamlEditor(text).parseAt(['pages', page, 'ecran']);
+  if (list is! YamlList || from < 0 || to >= list.length || from > to) {
+    throw EditException('Ces instructions n\'existent pas.');
+  }
+  final existing = _rootOf(text)['macros'];
+  final names = existing is YamlMap
+      ? existing.keys.map((k) => '$k').toList()
+      : <String>[];
+  final error = macroNameError(name, names);
+  if (error != null) throw EditException('Nom « $name » : $error');
+  final seen = <String>{};
+  for (final p in params) {
+    if (!isValidVariableName(p.name)) {
+      throw EditException(
+        'Paramètre « ${p.name} » : lettres, chiffres et _ seulement, sans '
+        'commencer par un chiffre.',
+      );
+    }
+    if (!seen.add(p.name)) {
+      throw EditException('Le paramètre « ${p.name} » est en double.');
+    }
+  }
+
+  final lines = text.split('\n');
+  final offsets = <int>[];
+  var at = 0;
+  for (final l in lines) {
+    offsets.add(at);
+    at += l.length + 1;
+  }
+  for (var i = from; i <= to; i++) {
+    if (_dash(list.nodes[i], lines) == null) {
+      throw EditException(
+        'Cet écran est écrit en ligne : extrayez depuis le texte.',
+      );
+    }
+  }
+
+  // Le corps : les lignes d'origine, où chaque valeur choisie devient `$n`.
+  final first = list.nodes[from];
+  final dashPrefix = _dash(first, lines)!;
+  final keyIndent = existing is YamlMap && existing.nodes.isNotEmpty
+      ? (existing.nodes.keys.first as YamlNode).span.start.column
+      : 2;
+  final newDash = keyIndent + 4;
+  final shift = newDash - dashPrefix.indexOf('-');
+  final body = <String>[];
+  for (var i = from; i <= to; i++) {
+    final node = list.nodes[i];
+    final start = node.span.start.line;
+    final end = _contentEnd(node, lines);
+    // Les remplacements de cette instruction, de la fin vers le début.
+    final cuts = <(int, int, String)>[];
+    for (var n = 0; n < params.length; n++) {
+      final p = params[n].value;
+      if (p.item != i) continue;
+      YamlNode? target = node;
+      for (final k in p.path) {
+        target = target is YamlMap ? target.nodes[k] : null;
+      }
+      if (target is! YamlScalar) continue;
+      final ref =
+          r'$'
+          '${n + 1}';
+      cuts.add((
+        target.span.start.offset,
+        target.span.end.offset,
+        p.type == MacroType.texte ? '"$ref"' : ref,
+      ));
+    }
+    cuts.sort((a, b) => b.$1.compareTo(a.$1));
+    var chunk = text.substring(
+      offsets[start],
+      offsets[end] + lines[end].length,
+    );
+    for (final (s, e, replacement) in cuts) {
+      chunk = chunk.replaceRange(
+        s - offsets[start],
+        e - offsets[start],
+        replacement,
+      );
+    }
+    final chunkLines = chunk.split('\n');
+    for (var k = 0; k < chunkLines.length; k++) {
+      var line = chunkLines[k];
+      if (k == 0) {
+        line = line.substring(dashPrefix.length);
+        body.add('${' ' * newDash}- $line');
+      } else if (shift >= 0) {
+        body.add(line.isEmpty ? line : '${' ' * shift}$line');
+      } else {
+        final strip = -shift;
+        final lead = line.length - line.trimLeft().length;
+        body.add(line.substring(lead < strip ? lead : strip));
+      }
+    }
+  }
+
+  // La définition de la macro.
+  final pad = ' ' * keyIndent;
+  final def = <String>[
+    '$pad${_pageScalar(name)}:',
+    if (description != null && description.trim().isNotEmpty)
+      '$pad  description: ${yamlString(description.trim())}',
+    if (params.isNotEmpty) '$pad  parametres:',
+    for (final p in params)
+      '$pad    - {nom: ${p.name}, type: ${p.value.type.label}, defaut: '
+          '${p.value.value is String ? yamlString(p.value.value as String) : p.value.value}}',
+    '$pad  ecran:',
+    ...body,
+  ];
+
+  // L'appel remplace les instructions : valeurs par défaut = valeurs actuelles,
+  // donc aucun argument.
+  final startLine = first.span.start.line;
+  final endLine = _contentEnd(list.nodes[to], lines);
+  lines.replaceRange(startLine, endLine + 1, [
+    '$dashPrefix${_pageScalar('macro')}: [${_pageScalar(name)}]',
+  ]);
+  var result = lines.join('\n');
+
+  // La macro va à la suite des autres, ou avant `pages:` s'il n'y en a pas.
+  final root = _rootOf(result);
+  final macros = root['macros'];
+  final out = result.split('\n');
+  if (macros is YamlMap && macros.nodes.isNotEmpty) {
+    final last = macros.nodes.values.last;
+    out.insertAll(_lastLine(last, out, last.span.start.line) + 1, def);
+  } else if (macros == null && !root.containsKey('macros')) {
+    final key = root.nodes.keys.cast<YamlNode>().firstWhere(
+      (k) => k.value == 'pages',
+    );
+    out.insertAll(key.span.start.line, ['macros:', ...def]);
+  } else {
+    throw EditException(
+      'Les macros sont écrites en ligne : ajoutez celle-ci dans le texte.',
+    );
+  }
+  result = _checked(out.join('\n'));
+
+  // L'extraction ne doit rien changer à ce que la page affiche.
+  final before = _pageBytes(text, page);
+  final after = _pageBytes(result, page);
+  var same = before.length == after.length;
+  for (var i = 0; same && i < before.length; i++) {
+    same = before[i] == after[i];
+  }
+  if (!same) {
+    throw EditException(
+      'L\'extraction aurait changé l\'affichage de la page : le texte n\'a pas '
+      'été modifié (si cela se reproduit, c\'est une erreur de l\'éditeur).',
+    );
+  }
+  return result;
 }
