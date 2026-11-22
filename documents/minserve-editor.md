@@ -429,8 +429,11 @@ une fois `minterm_view` extrait.
 
 **À prendre**
 
-Plus rien d'ouvert à ce stade. Une question technique se tranche au fil des étapes : la forme
-exacte de la clé `parametres` des mingets (étape 8).
+Plus rien d'ouvert à ce stade. La forme de la clé `parametres` des mingets est **tranchée** (étape 8a,
+faite côté serveur) : liste de `{nom, type (entier|texte|booleen), defaut, min, max, description}`, le
+n-ième étant `$n`, dans une macro écrite en dictionnaire `{description, parametres, ecran}`. Le serveur
+contrôle les appels, complète les derniers arguments omis par leur `defaut`, et `Service.macros` expose les
+définitions à l'éditeur.
 
 ## 10. Risques
 
