@@ -7,13 +7,13 @@ Un service Minserve est un fichier `service.yaml` : des pages, ce qu'elles affic
 l'on peut y saisir et où mène chaque saisie. Sur un service de taille réelle, on perd vite la
 vue d'ensemble. L'éditeur est là pour la retrouver.
 
-> **État : étape 4 du plan** (voir [documents/minserve-editor.md](documents/minserve-editor.md)).
+> **État : étape 6 du plan** (voir [documents/minserve-editor.md](documents/minserve-editor.md)).
 > L'application ouvre un `service.yaml`, le modifie dans un éditeur de texte à numéros de ligne
 > et le lit en direct avec le code du serveur (`minserve_core`). À côté, le **graphe des pages** :
 > pages, transitions, impasses, pages inaccessibles, liens globaux, recherche, et « Aller au
 > texte » depuis une page. Le graphe **modifie le texte** : créer, renommer et supprimer une
 > page, ajouter et retirer une transition (les autres lignes, commentaires compris, restent
-> telles quelles). **Formulaires de page** (règles, saisie, accès) : chaque champ ne réécrit que sa clé. Les volets (texte / graphe, graphe / panneau de page) se **redimensionnent en tirant leur poignée**. **Défaire / refaire** (boutons ou Ctrl+Z, Ctrl+Y) valent pour la frappe comme
+> telles quelles). **Rendu** de la page sur un écran Minitel (émulateur de Minterm), mis à jour à chaque modification ; un **double clic** sur une page (ou le bouton « Ouvrir ») l’ouvre en grand à la place du graphe : rendu en haut, propriétés en bas. **Formulaires de page** (règles, saisie, accès) : chaque champ ne réécrit que sa clé. Les volets (texte / graphe, graphe / panneau de page) se **redimensionnent en tirant leur poignée**. **Défaire / refaire** (boutons ou Ctrl+Z, Ctrl+Y) valent pour la frappe comme
 > pour le graphe. On enregistre par un téléchargement.
 
 ## Ce que l'éditeur doit faire
@@ -68,8 +68,8 @@ La police de l'éditeur (DejaVu Sans Mono, licence Bitstream Vera) est embarqué
 
 | Dépôt | Rôle |
 | --- | --- |
-| [minserve](https://github.com/abasty/minserve) | Le serveur Minitel et le format de `service.yaml`. L'éditeur en réutilisera le cœur (lecture, validation, macros, Videotex), à extraire dans un paquet. |
-| [minterm](https://github.com/abasty/minterm) | L'émulateur Minitel en Flutter. L'éditeur en réutilisera l'émulateur et son widget d'affichage, à extraire dans un paquet. |
+| [minserve](https://github.com/abasty/minserve) | Le serveur Minitel et le format de `service.yaml`. L'éditeur réutilise son cœur (`packages/minserve_core` : lecture, validation, macros, Videotex, rendu d'une page). |
+| [minterm](https://github.com/abasty/minterm) | L'émulateur Minitel en Flutter. L'éditeur réutilise l'émulateur et l'affichage de l'écran (`packages/minterm_view`). |
 
 ## Publication
 

@@ -25,3 +25,11 @@ Idées hors du plan en 9 étapes de `minserve-editor.md` §8. Pas d'ordre ni d'e
 - [ ] **Changer la page de départ** (`debut`) depuis le graphe.
 - [ ] **Transitions de programme et d'accès** (`exec.suivant`, `acces.sinon`) modifiables depuis le graphe ; aujourd'hui seulement les règles de `action`.
 - [ ] Changer la cible ou la touche d'une règle existante (aujourd'hui : la retirer et en ajouter une).
+
+## Rendu
+
+- [ ] **Clignotement** des caractères dans l'aperçu (aujourd'hui, ils sont affichés fixes).
+- [ ] **Fichiers `affiche`** : les montrer (choisir le dossier `assets` du service, ou les glisser dans l'éditeur).
+- [ ] **Données de test** (variables, messages, compteurs) pour voir la page remplie (étape 7).
+- [ ] La lettre `F` en haut à droite (ligne 00) est celle d'un terminal non connecté : peut-être la masquer dans l'aperçu.
+- [ ] Remplacer les dépendances `path:` (`minserve_core`, `minterm_view`) par `git:` avant de publier par GitHub Actions.

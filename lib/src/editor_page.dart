@@ -450,6 +450,7 @@ class _EditorPageState extends State<EditorPage> {
                             : GraphPanel(
                                 graph: graph,
                                 layout: _layout!,
+                                service: _diagnostics.service,
                                 onGoToPage: _goToPage,
                                 editing: _diagnostics.isValid
                                     ? GraphEditing(

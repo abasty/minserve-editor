@@ -12,6 +12,8 @@ dependencies:
   yaml: ^3.1.4
   minserve_core:
     path: ../minserve/packages/minserve_core
+  minterm_view:
+    path: ../minterm/packages/minterm_view
   yaml_edit: ^2.2.4
 
 dev_dependencies:

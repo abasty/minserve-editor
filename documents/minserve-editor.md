@@ -353,6 +353,22 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    `sinon`, `message` et `mdp_provisoire`. Pas encore : `zonemessage`, `donnees`, `exec` (un
    formulaire), conditions `si`, actions de compte et de message (`connexion`, `message`…).
 6. **Extraire `minterm_view`** de Minterm, puis **l'aperçu** d'une page.
+   *Faite.* **Minterm** (branche `feature/view`, un commit) : `packages/minterm_view/` contient
+   l'émulateur `TMinitel`, les jeux de caractères (`assets/g0g2.png`, `g1.png`, déplacés) avec
+   les caractères redéfinis (`MinitelFonts`), le peintre de l'écran (`MinitelPainter`, qui lit un
+   `MinitelDisplay`) et un widget `MinitelView` sans clavier ni connexion ni son. L'application
+   Minterm en dépend par chemin ; son peintre est une sous-classe mince (son, effet « CRT 80's »,
+   réglages). Ses 105 tests donnent le même résultat qu'avant (2 échecs qui existaient déjà, sur
+   le libellé « Cx/Fin » du clavier compact). **Minserve** : `renderPage` (cœur) est la seule
+   définition de « ce qu'on envoie pour afficher une page » (écran, zone de saisie vide, curseur) ;
+   l'interpréteur l'utilise, et les 1270 tests passent. **Éditeur** : onglet « Rendu » du panneau
+   de la page (`lib/src/preview/page_preview.dart`) : l'écran Minitel de la page, tel que le
+   serveur l'afficherait, mis à jour à chaque modification du texte. Limites de cette étape :
+   pas de données (`donnees`), de variables ni de fichiers `affiche` (ils sont listés, mais pas
+   montrés), pas de clignotement, pas d'édition sur l'aperçu (étapes 7 et 9).
+   **Mode page** : un double clic sur une page du graphe (ou le bouton d'ouverture) l'ouvre en
+   grand à la place du graphe — rendu en haut, propriétés (aperçu, règles, saisie, accès) en bas,
+   séparés par une poignée ; « Graphe » ramène au graphe, centré sur la page.
 7. **L'aperçu d'un morceau**, les données de test, l'édition de l'`ecran` en liste
    d'instructions avec aperçu.
 8. **Les mingets** : forme étendue côté serveur, palette, formulaire d'appel, extraction,

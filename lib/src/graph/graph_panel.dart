@@ -1,9 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:minserve_core/minserve_core.dart' show Service;
 
 import '../split_handle.dart';
 import 'graph_dialogs.dart';
+import '../preview/page_preview.dart';
 import 'page_forms.dart';
 import 'layout.dart';
 import 'service_edit.dart';
@@ -23,7 +25,7 @@ class GraphEditing {
 
 /// Le graphe des pages d'un service : une case par page, une flèche par
 /// transition. Toucher une page la sélectionne et met ses flèches en avant.
-enum _PageTab { overview, rules, input, access }
+enum _PageTab { overview, rules, input, access, preview }
 
 class GraphPanel extends StatefulWidget {
   const GraphPanel({
@@ -32,6 +34,7 @@ class GraphPanel extends StatefulWidget {
     required this.layout,
     this.onGoToPage,
     this.editing,
+    this.service,
     this.stale,
   });
 
@@ -43,6 +46,10 @@ class GraphPanel extends StatefulWidget {
 
   /// De quoi modifier le service depuis le graphe ; `null` : lecture seule.
   final GraphEditing? editing;
+
+  /// Le service du texte actuel, pour l'aperçu des pages ; `null` si le texte
+  /// n'est pas valide.
+  final Service? service;
 
   /// Si le texte n'est plus valide : pourquoi ce graphe est celui d'avant.
   final String? stale;
@@ -57,6 +64,18 @@ class _GraphPanelState extends State<GraphPanel> {
   Size _viewport = Size.zero;
   bool _fitted = false;
   String? _selected;
+
+  /// La page ouverte en grand (mode « contextuel page » : son rendu en haut,
+  /// ses propriétés en bas, à la place du graphe), ou `null`.
+  String? _open;
+
+  /// Aperçu en couleur ou en niveaux de gris (par défaut).
+  bool _previewColor = false;
+
+  /// Le dernier clic sur un nœud, pour reconnaître le double clic sans
+  /// retarder le clic simple.
+  String? _lastTapped;
+  DateTime _lastTapAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _hideBack = false;
   Set<String> _marked = {};
   String _markedBy = '';
@@ -88,11 +107,13 @@ class _GraphPanelState extends State<GraphPanel> {
     if (pending != null && widget.graph.nodes.containsKey(pending)) {
       _pending = null;
       _selected = pending;
+      if (_open != null) _open = pending;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _center(pending);
       });
     }
     if (!widget.graph.nodes.containsKey(_selected)) _selected = null;
+    if (!widget.graph.nodes.containsKey(_open)) _open = null;
     _marked = _marked.intersection(widget.graph.nodes.keys.toSet());
   }
 
@@ -128,8 +149,41 @@ class _GraphPanelState extends State<GraphPanel> {
   }
 
   void _select(String? name, {bool center = false}) {
-    setState(() => _selected = name);
-    if (center && name != null) _center(name);
+    setState(() {
+      _selected = name;
+      if (_open != null && name != null) _open = name;
+    });
+    if (center && name != null && _open == null) _center(name);
+  }
+
+  void _openPage(String name) => setState(() {
+    _selected = name;
+    _open = name;
+  });
+
+  /// Revient au graphe, centré sur la page qu'on quitte.
+  void _closePage() {
+    final name = _open;
+    setState(() => _open = null);
+    if (name != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _center(name);
+      });
+    }
+  }
+
+  void _tapNode(String name) {
+    final now = DateTime.now();
+    final again =
+        _lastTapped == name &&
+        now.difference(_lastTapAt) < const Duration(milliseconds: 400);
+    _lastTapped = again ? null : name;
+    _lastTapAt = now;
+    if (again) {
+      _openPage(name);
+    } else {
+      _select(name);
+    }
   }
 
   // --- Modifications ---
@@ -269,6 +323,7 @@ class _GraphPanelState extends State<GraphPanel> {
     final deadEnds = graph.deadEnds;
     final unreachable = graph.unreachable;
     final matches = _matches;
+    final open = _open;
     return Column(
       children: [
         if (widget.stale != null)
@@ -293,41 +348,21 @@ class _GraphPanelState extends State<GraphPanel> {
               ),
             ),
           ),
-        _toolbar(deadEnds, unreachable),
-        if (graph.globals.isNotEmpty) _globals(),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, box) {
-              _viewport = box.biggest;
-              if (!_fitted && !_viewport.isEmpty) {
-                _fitted = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _fit();
-                });
-              }
-              return ClipRect(
-                child: InteractiveViewer(
-                  transformationController: _view,
-                  constrained: false,
-                  minScale: 0.15,
-                  maxScale: 2.5,
-                  boundaryMargin: const EdgeInsets.all(600),
-                  child: SizedBox.fromSize(
-                    size: widget.layout.size,
-                    child: _canvas(matches),
-                  ),
-                ),
-              );
-            },
+        if (open != null && widget.service != null) ...[
+          _pageBar(open),
+          Expanded(
+            child: PagePreview(
+              service: widget.service!,
+              page: open,
+              large: true,
+              color: _previewColor,
+            ),
           ),
-        ),
-        if (_selected != null) ...[
           SplitHandle(
-            key: const Key('split-graph-details'),
+            key: const Key('split-page-details'),
             axis: Axis.vertical,
             onStart: () => _heightAtDragStart =
-                _detailsKey.currentContext?.size?.height ?? 200,
-            // Tirer vers le haut agrandit le panneau.
+                _detailsKey.currentContext?.size?.height ?? 300,
             onDrag: (dy) => setState(
               () => _detailsHeight = (_heightAtDragStart - dy).clamp(
                 80.0,
@@ -335,9 +370,82 @@ class _GraphPanelState extends State<GraphPanel> {
               ),
             ),
           ),
-          _details(_selected!),
+          _details(open, pageMode: true),
+        ] else ...[
+          _toolbar(deadEnds, unreachable),
+          if (graph.globals.isNotEmpty) _globals(),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                _viewport = box.biggest;
+                if (!_fitted && !_viewport.isEmpty) {
+                  _fitted = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _fit();
+                  });
+                }
+                return ClipRect(
+                  child: InteractiveViewer(
+                    transformationController: _view,
+                    constrained: false,
+                    minScale: 0.15,
+                    maxScale: 2.5,
+                    boundaryMargin: const EdgeInsets.all(600),
+                    child: SizedBox.fromSize(
+                      size: widget.layout.size,
+                      child: _canvas(matches),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_selected != null) ...[
+            SplitHandle(
+              key: const Key('split-graph-details'),
+              axis: Axis.vertical,
+              onStart: () => _heightAtDragStart =
+                  _detailsKey.currentContext?.size?.height ?? 200,
+              // Tirer vers le haut agrandit le panneau.
+              onDrag: (dy) => setState(
+                () => _detailsHeight = (_heightAtDragStart - dy).clamp(
+                  80.0,
+                  MediaQuery.sizeOf(context).height * 0.75,
+                ),
+              ),
+            ),
+            _details(_selected!),
+          ],
         ],
       ],
+    );
+  }
+
+  Widget _pageBar(String name) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+      child: Row(
+        children: [
+          TextButton.icon(
+            key: const Key('back-to-graph'),
+            onPressed: _closePage,
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Graphe'),
+          ),
+          Text('Page « $name »', style: Theme.of(context).textTheme.titleSmall),
+          const Spacer(),
+          IconButton(
+            key: const Key('preview-colors'),
+            tooltip: _previewColor
+                ? 'Couleur (passer en niveaux de gris)'
+                : 'Niveaux de gris (passer en couleur)',
+            isSelected: _previewColor,
+            icon: const Icon(Icons.palette_outlined),
+            selectedIcon: const Icon(Icons.palette),
+            onPressed: () => setState(() => _previewColor = !_previewColor),
+          ),
+        ],
+      ),
     );
   }
 
@@ -475,7 +583,7 @@ class _GraphPanelState extends State<GraphPanel> {
                           (e.from == _selected && e.to == node.name) ||
                           (e.to == _selected && e.from == node.name),
                     ),
-                onTap: () => _select(node.name),
+                onTap: () => _tapNode(node.name),
               ),
             ),
         ],
@@ -483,15 +591,18 @@ class _GraphPanelState extends State<GraphPanel> {
     );
   }
 
-  Widget _details(String name) {
+  Widget _details(String name, {bool pageMode = false}) {
     final graph = widget.graph;
     final node = graph.nodes[name]!;
     final out = graph.outgoing(name).toList();
     final inn = graph.incoming(name).where((e) => !e.isLoop).toList();
     final theme = Theme.of(context);
     final editing = widget.editing;
-    final tab = editing == null ? _PageTab.overview : _tab;
-    final fixed = _detailsHeight;
+    // En mode page, le rendu est déjà en haut : pas d'onglet « Rendu ».
+    final tab = editing == null || (pageMode && _tab == _PageTab.preview)
+        ? _PageTab.overview
+        : _tab;
+    final fixed = pageMode ? (_detailsHeight ?? 300) : _detailsHeight;
     return Material(
       key: _detailsKey,
       color: theme.colorScheme.surfaceContainer,
@@ -501,7 +612,9 @@ class _GraphPanelState extends State<GraphPanel> {
             : BoxConstraints(
                 maxHeight: editing == null
                     ? 190
-                    : (tab == _PageTab.overview ? 250 : 300),
+                    : (tab == _PageTab.overview
+                          ? 250
+                          : (tab == _PageTab.preview ? 380 : 300)),
               ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
@@ -523,10 +636,18 @@ class _GraphPanelState extends State<GraphPanel> {
                           _PageTab.rules => 'action',
                           _PageTab.input => 'entree',
                           _PageTab.access => 'acces',
+                          _PageTab.preview => 'ecran',
                         },
                       ),
                       icon: const Icon(Icons.code, size: 18),
                       label: const Text('Aller au texte'),
+                    ),
+                  if (!pageMode && widget.service != null)
+                    IconButton(
+                      key: const Key('open-page'),
+                      tooltip: 'Ouvrir la page en grand (double clic)',
+                      icon: const Icon(Icons.open_in_full),
+                      onPressed: () => _openPage(name),
                     ),
                   if (widget.editing != null) ...[
                     IconButton(
@@ -568,23 +689,40 @@ class _GraphPanelState extends State<GraphPanel> {
               ),
               if (editing != null) ...[
                 const SizedBox(height: 6),
-                SegmentedButton<_PageTab>(
-                  key: const Key('page-tabs'),
-                  showSelectedIcon: false,
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  segments: const [
-                    ButtonSegment(
-                      value: _PageTab.overview,
-                      label: Text('Aperçu'),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<_PageTab>(
+                    key: const Key('page-tabs'),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
                     ),
-                    ButtonSegment(value: _PageTab.rules, label: Text('Règles')),
-                    ButtonSegment(value: _PageTab.input, label: Text('Saisie')),
-                    ButtonSegment(value: _PageTab.access, label: Text('Accès')),
-                  ],
-                  selected: {tab},
-                  onSelectionChanged: (v) => setState(() => _tab = v.single),
+                    segments: [
+                      const ButtonSegment(
+                        value: _PageTab.overview,
+                        label: Text('Aperçu'),
+                      ),
+                      const ButtonSegment(
+                        value: _PageTab.rules,
+                        label: Text('Règles'),
+                      ),
+                      const ButtonSegment(
+                        value: _PageTab.input,
+                        label: Text('Saisie'),
+                      ),
+                      const ButtonSegment(
+                        value: _PageTab.access,
+                        label: Text('Accès'),
+                      ),
+                      if (!pageMode)
+                        ButtonSegment(
+                          value: _PageTab.preview,
+                          label: Text('Rendu'),
+                        ),
+                    ],
+                    selected: {tab},
+                    onSelectionChanged: (v) => setState(() => _tab = v.single),
+                  ),
                 ),
               ],
               const SizedBox(height: 6),
@@ -604,6 +742,13 @@ class _GraphPanelState extends State<GraphPanel> {
                   text: editing.text(),
                   apply: editing.apply,
                   onGoToPage: widget.onGoToPage,
+                )
+              else if (tab == _PageTab.preview && widget.service != null)
+                PagePreview(
+                  service: widget.service!,
+                  page: name,
+                  color: _previewColor,
+                  onColorChanged: (v) => setState(() => _previewColor = v),
                 )
               else if (editing != null && tab == _PageTab.access)
                 AccessForm(
