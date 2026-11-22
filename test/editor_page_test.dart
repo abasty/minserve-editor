@@ -4,21 +4,70 @@ import 'package:minserve_editor/src/editor_page.dart';
 import 'package:minserve_editor/src/file_access.dart';
 
 class FakeFiles implements FileAccess {
+  FakeFiles({this.savesInPlace = false});
+
   OpenedFile? toOpen;
   final saved = <(String, String)>[];
 
-  @override
-  Future<OpenedFile?> open() async => toOpen;
+  /// Les appels à `save` : chemin donné et « enregistrer sous » demandé.
+  final calls = <({String? path, bool saveAs})>[];
+
+  /// Ce que répond la boîte « Enregistrer sous » : un chemin, ou `null` si on
+  /// annule.
+  String? chosenPath;
+
+  /// Une erreur à lever à la prochaine lecture ou écriture.
+  FileAccessException? failure;
 
   @override
-  Future<void> save(String name, String text) async => saved.add((name, text));
+  final bool savesInPlace;
+
+  @override
+  Future<OpenedFile?> open() async {
+    if (failure != null) throw failure!;
+    return toOpen;
+  }
+
+  @override
+  Future<OpenedFile?> save(
+    String name,
+    String text, {
+    String? path,
+    bool saveAs = false,
+  }) async {
+    if (failure != null) throw failure!;
+    calls.add((path: path, saveAs: saveAs));
+    if (!savesInPlace) {
+      saved.add((name, text));
+      return OpenedFile(name, text);
+    }
+    final target = saveAs ? chosenPath : (path ?? chosenPath);
+    if (target == null) return null;
+    saved.add((target, text));
+    return OpenedFile(target.split('/').last, text, path: target);
+  }
 }
 
-Future<void> pumpEditor(WidgetTester tester, FakeFiles files) async {
+Future<void> pumpEditor(
+  WidgetTester tester,
+  FakeFiles files, {
+  OpenedFile? file,
+  String? message,
+  bool guardClose = false,
+}) async {
   tester.view.physicalSize = const Size(1000, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(home: EditorPage(files: files)));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: EditorPage(
+        files: files,
+        initialFile: file,
+        startupMessage: message,
+        guardClose: guardClose,
+      ),
+    ),
+  );
 }
 
 String status(WidgetTester tester) => tester

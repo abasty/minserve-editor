@@ -64,7 +64,10 @@ La police de l'éditeur (DejaVu Sans Mono, licence Bitstream Vera) est embarqué
 Le même code compile en application de bureau (plan : `documents/minserve-editor.md` §11).
 `./build-linux.sh` lance les tests, compile (`flutter build linux --release`) et range le dossier
 `bundle` dans `build/minserve-editor-linux-x64.tar.gz` : décompresser, puis lancer `minserve-editor/minserve_editor`
-(l'exécutable, `data/` et `lib/` restent ensemble). Il faut GTK 3 sur la machine ; rien n'est publié.
+(l'exécutable, `data/` et `lib/` restent ensemble). Il faut GTK 3 sur la machine, et `zenity` ou `kdialog`
+pour les boîtes d'ouverture et d'enregistrement ; rien n'est publié. Sur le bureau, « Enregistrer » (Ctrl+S)
+réécrit le fichier ouvert, « Enregistrer sous… » (Ctrl+Maj+S) en choisit un autre, et
+`minserve_editor service.yaml` ouvre un fichier au départ.
 
 ## Documentation
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,30 +40,49 @@ const _diagnoseDelay = Duration(milliseconds: 300);
 class EditorPage extends StatefulWidget {
   const EditorPage({
     super.key,
-    this.files = const BrowserFileAccess(),
-    this.initialText = newServiceText,
-  });
+    FileAccess? files,
+    this.initialFile,
+    this.startupMessage,
+    this.guardClose = false,
+  }) : files = files ?? const BrowserFileAccess();
 
   final FileAccess files;
-  final String initialText;
+
+  /// Le fichier à montrer au départ (nommé sur la ligne de commande) ; sinon
+  /// un nouveau service.
+  final OpenedFile? initialFile;
+
+  /// Un message à montrer au départ (le fichier de la ligne de commande n'a pas
+  /// pu être lu, par exemple).
+  final String? startupMessage;
+
+  /// Vrai sur le bureau : la fermeture de la fenêtre demande confirmation
+  /// s'il reste des modifications non enregistrées.
+  final bool guardClose;
 
   @override
   State<EditorPage> createState() => _EditorPageState();
 }
 
 class _EditorPageState extends State<EditorPage> {
-  late final _text = TextEditingController(text: widget.initialText);
+  late final _text = TextEditingController(text: _initialText);
   final _commands = CodeEditorController();
   Timer? _timer;
-  late Diagnostics _diagnostics = diagnose(widget.initialText);
+  late Diagnostics _diagnostics = diagnose(_initialText);
   ViewMode _mode = ViewMode.both;
 
   /// Le graphe du dernier texte valide : il reste affiché tant que le texte
   /// est invalide.
   ServiceGraph? _graph;
   GraphLayout? _layout;
-  String _name = 'service.yaml';
-  late String _saved = widget.initialText;
+  late String _name = widget.initialFile?.name ?? 'service.yaml';
+
+  /// Le chemin du fichier ouvert, sur le bureau : « Enregistrer » le réécrit.
+  late String? _path = widget.initialFile?.path;
+  late String _saved = _initialText;
+  AppLifecycleListener? _exitListener;
+
+  String get _initialText => widget.initialFile?.text ?? newServiceText;
 
   bool get _dirty => _text.text != _saved;
 
@@ -72,6 +92,31 @@ class _EditorPageState extends State<EditorPage> {
     _text.addListener(_edited);
     FocusManager.instance.addListener(_focusChanged);
     _useGraph(_diagnostics);
+    if (widget.guardClose) {
+      // Le moteur du bureau transmet la fermeture de la fenêtre au cadre
+      // d'application, qui la demande ici.
+      _exitListener = AppLifecycleListener(
+        onExitRequested: () async => await _confirmDiscard()
+            ? AppExitResponse.exit
+            : AppExitResponse.cancel,
+      );
+    }
+    final message = widget.startupMessage;
+    if (message != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _tell(message));
+    }
+  }
+
+  void _tell(String message) {
+    if (!mounted) return;
+    // Assez long pour être lu, et à fermer à la main.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 12),
+        showCloseIcon: true,
+      ),
+    );
   }
 
   /// Un champ qui se ferme (Entrée dans un formulaire, par exemple) laisse le
@@ -92,12 +137,13 @@ class _EditorPageState extends State<EditorPage> {
     _timer?.cancel();
     _typingTimer?.cancel();
     FocusManager.instance.removeListener(_focusChanged);
+    _exitListener?.dispose();
     _pageFocus.dispose();
     _text.dispose();
     super.dispose();
   }
 
-  late String _lastSeen = widget.initialText;
+  late String _lastSeen = _initialText;
   TextSelection _lastSelection = const TextSelection.collapsed(offset: 0);
 
   final _history = EditHistory();
@@ -268,7 +314,7 @@ class _EditorPageState extends State<EditorPage> {
     return ok ?? false;
   }
 
-  void _load(String name, String text) {
+  void _load(String name, String text, {String? path}) {
     _timer?.cancel();
     _typingTimer?.cancel();
     _typing = false;
@@ -279,6 +325,7 @@ class _EditorPageState extends State<EditorPage> {
     _history.clear();
     setState(() {
       _name = name;
+      _path = path;
       _saved = text;
       _setDiagnostics(text);
     });
@@ -290,216 +337,261 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _open() async {
     if (!await _confirmDiscard()) return;
-    final file = await widget.files.open();
-    if (file != null) _load(file.name, file.text);
+    try {
+      final file = await widget.files.open();
+      if (file != null) _load(file.name, file.text, path: file.path);
+    } on FileAccessException catch (e) {
+      _tell(e.message);
+    }
   }
 
-  Future<void> _save() async {
+  /// Enregistre le texte : en place si on connaît le fichier (bureau), sinon
+  /// la personne choisit le nom. [saveAs] demande toujours le nom.
+  Future<void> _save({bool saveAs = false}) async {
     final text = _text.text;
-    await widget.files.save(_name, text);
-    if (mounted) setState(() => _saved = text);
+    try {
+      final file = await widget.files.save(
+        _name,
+        text,
+        path: _path,
+        saveAs: saveAs,
+      );
+      if (file == null || !mounted) return;
+      setState(() {
+        _saved = text;
+        _name = file.name;
+        _path = file.path;
+      });
+    } on FileAccessException catch (e) {
+      _tell(e.message);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CallbackShortcuts(
-      // Notre historique remplace celui du champ de texte, qui ne voit pas les
-      // modifications du graphe.
-      bindings: {
-        for (final m in [
-          (control: true, meta: false),
-          (control: false, meta: true),
-        ]) ...{
-          SingleActivator(
-            LogicalKeyboardKey.keyZ,
-            control: m.control,
-            meta: m.meta,
-          ): _undoEdit,
-          SingleActivator(
-            LogicalKeyboardKey.keyY,
-            control: m.control,
-            meta: m.meta,
-          ): _redoEdit,
-          SingleActivator(
-            LogicalKeyboardKey.keyZ,
-            control: m.control,
-            meta: m.meta,
-            shift: true,
-          ): _redoEdit,
+    return Title(
+      // Le titre de la fenêtre (ou de l'onglet) : le fichier, et un point s'il
+      // reste des modifications à enregistrer.
+      title: '${_dirty ? '• ' : ''}$_name — Minserve Editor',
+      color: scheme.primary,
+      child: CallbackShortcuts(
+        // Notre historique remplace celui du champ de texte, qui ne voit pas les
+        // modifications du graphe.
+        bindings: {
+          for (final m in [
+            (control: true, meta: false),
+            (control: false, meta: true),
+          ]) ...{
+            SingleActivator(
+              LogicalKeyboardKey.keyZ,
+              control: m.control,
+              meta: m.meta,
+            ): _undoEdit,
+            SingleActivator(
+              LogicalKeyboardKey.keyY,
+              control: m.control,
+              meta: m.meta,
+            ): _redoEdit,
+            SingleActivator(
+              LogicalKeyboardKey.keyZ,
+              control: m.control,
+              meta: m.meta,
+              shift: true,
+            ): _redoEdit,
+            SingleActivator(
+              LogicalKeyboardKey.keyS,
+              control: m.control,
+              meta: m.meta,
+            ): _save,
+            SingleActivator(
+              LogicalKeyboardKey.keyS,
+              control: m.control,
+              meta: m.meta,
+              shift: true,
+            ): () =>
+                _save(saveAs: true),
+          },
         },
-      },
-      child: Focus(
-        focusNode: _pageFocus,
-        autofocus: true,
-        // Un clic hors d'un champ de texte rend le focus à la page.
-        child: Listener(
-          onPointerDown: (_) =>
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                final focus = FocusManager.instance.primaryFocus;
-                if (mounted && (focus == null || focus is FocusScopeNode)) {
-                  _pageFocus.requestFocus();
-                }
-              }),
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text('Minserve Editor  v$appVersion'),
-              actions: [
-                Center(
-                  child: Text(
-                    _dirty ? '$_name •' : _name,
-                    key: const Key('file-name'),
+        child: Focus(
+          focusNode: _pageFocus,
+          autofocus: true,
+          // Un clic hors d'un champ de texte rend le focus à la page.
+          child: Listener(
+            onPointerDown: (_) =>
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final focus = FocusManager.instance.primaryFocus;
+                  if (mounted && (focus == null || focus is FocusScopeNode)) {
+                    _pageFocus.requestFocus();
+                  }
+                }),
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text('Minserve Editor  v$appVersion'),
+                actions: [
+                  Center(
+                    child: Text(
+                      _dirty ? '$_name •' : _name,
+                      key: const Key('file-name'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                SegmentedButton<ViewMode>(
-                  key: const Key('view-mode'),
-                  showSelectedIcon: false,
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  segments: const [
-                    ButtonSegment(
-                      value: ViewMode.text,
-                      icon: Icon(Icons.code),
-                      tooltip: 'Texte',
+                  const SizedBox(width: 8),
+                  SegmentedButton<ViewMode>(
+                    key: const Key('view-mode'),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
                     ),
-                    ButtonSegment(
-                      value: ViewMode.both,
-                      icon: Icon(Icons.vertical_split),
-                      tooltip: 'Texte et graphe',
-                    ),
-                    ButtonSegment(
-                      value: ViewMode.graph,
-                      icon: Icon(Icons.account_tree_outlined),
-                      tooltip: 'Graphe',
-                    ),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: (m) => setState(() => _mode = m.single),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  key: const Key('undo'),
-                  tooltip: 'Défaire (Ctrl+Z)',
-                  icon: const Icon(Icons.undo),
-                  onPressed: _history.canUndo ? _undoEdit : null,
-                ),
-                IconButton(
-                  key: const Key('redo'),
-                  tooltip: 'Refaire (Ctrl+Y)',
-                  icon: const Icon(Icons.redo),
-                  onPressed: _history.canRedo ? _redoEdit : null,
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Nouveau',
-                  icon: const Icon(Icons.note_add_outlined),
-                  onPressed: _new,
-                ),
-                IconButton(
-                  tooltip: 'Ouvrir',
-                  icon: const Icon(Icons.folder_open),
-                  onPressed: _open,
-                ),
-                IconButton(
-                  tooltip: 'Enregistrer',
-                  icon: const Icon(Icons.save_alt),
-                  onPressed: _save,
-                ),
-                const SizedBox(width: 8),
-              ],
-            ),
-            body: LayoutBuilder(
-              builder: (context, box) {
-                final wide = box.maxWidth >= _splitWidth;
-                final shown = _mode == ViewMode.both && !wide
-                    ? ViewMode.text
-                    : _mode;
-                final graph = _graph;
-                // Les deux volets restent dans l'arbre (le texte garde son défilement,
-                // le graphe sa sélection) : celui qu'on ne montre pas a une largeur
-                // nulle.
-                final textWidth = switch (shown) {
-                  ViewMode.text => box.maxWidth,
-                  ViewMode.graph => 0.0,
-                  ViewMode.both => _textWidthIn(box.maxWidth),
-                };
-                final graphWidth = switch (shown) {
-                  ViewMode.text => 0.0,
-                  ViewMode.graph => box.maxWidth,
-                  ViewMode.both =>
-                    box.maxWidth -
-                        _textWidthIn(box.maxWidth) -
-                        SplitHandle.thickness,
-                };
-                return Stack(
-                  children: [
-                    Positioned(
-                      key: const ValueKey('pane-text'),
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: textWidth,
-                      child: Offstage(
-                        offstage: textWidth == 0,
-                        child: _textPane(scheme),
+                    segments: const [
+                      ButtonSegment(
+                        value: ViewMode.text,
+                        icon: Icon(Icons.code),
+                        tooltip: 'Texte',
                       ),
+                      ButtonSegment(
+                        value: ViewMode.both,
+                        icon: Icon(Icons.vertical_split),
+                        tooltip: 'Texte et graphe',
+                      ),
+                      ButtonSegment(
+                        value: ViewMode.graph,
+                        icon: Icon(Icons.account_tree_outlined),
+                        tooltip: 'Graphe',
+                      ),
+                    ],
+                    selected: {_mode},
+                    onSelectionChanged: (m) => setState(() => _mode = m.single),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    key: const Key('undo'),
+                    tooltip: 'Défaire (Ctrl+Z)',
+                    icon: const Icon(Icons.undo),
+                    onPressed: _history.canUndo ? _undoEdit : null,
+                  ),
+                  IconButton(
+                    key: const Key('redo'),
+                    tooltip: 'Refaire (Ctrl+Y)',
+                    icon: const Icon(Icons.redo),
+                    onPressed: _history.canRedo ? _redoEdit : null,
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Nouveau',
+                    icon: const Icon(Icons.note_add_outlined),
+                    onPressed: _new,
+                  ),
+                  IconButton(
+                    tooltip: 'Ouvrir',
+                    icon: const Icon(Icons.folder_open),
+                    onPressed: _open,
+                  ),
+                  IconButton(
+                    tooltip: 'Enregistrer',
+                    icon: const Icon(Icons.save_alt),
+                    onPressed: _save,
+                  ),
+                  if (widget.files.savesInPlace)
+                    IconButton(
+                      key: const Key('save-as'),
+                      tooltip: 'Enregistrer sous…',
+                      icon: const Icon(Icons.save_as),
+                      onPressed: () => _save(saveAs: true),
                     ),
-                    if (shown == ViewMode.both)
+                  const SizedBox(width: 8),
+                ],
+              ),
+              body: LayoutBuilder(
+                builder: (context, box) {
+                  final wide = box.maxWidth >= _splitWidth;
+                  final shown = _mode == ViewMode.both && !wide
+                      ? ViewMode.text
+                      : _mode;
+                  final graph = _graph;
+                  // Les deux volets restent dans l'arbre (le texte garde son défilement,
+                  // le graphe sa sélection) : celui qu'on ne montre pas a une largeur
+                  // nulle.
+                  final textWidth = switch (shown) {
+                    ViewMode.text => box.maxWidth,
+                    ViewMode.graph => 0.0,
+                    ViewMode.both => _textWidthIn(box.maxWidth),
+                  };
+                  final graphWidth = switch (shown) {
+                    ViewMode.text => 0.0,
+                    ViewMode.graph => box.maxWidth,
+                    ViewMode.both =>
+                      box.maxWidth -
+                          _textWidthIn(box.maxWidth) -
+                          SplitHandle.thickness,
+                  };
+                  return Stack(
+                    children: [
                       Positioned(
-                        left: textWidth,
+                        key: const ValueKey('pane-text'),
+                        left: 0,
                         top: 0,
                         bottom: 0,
-                        width: SplitHandle.thickness,
-                        child: SplitHandle(
-                          key: const Key('split-text-graph'),
-                          axis: Axis.horizontal,
-                          onStart: () => _shareAtDragStart = _textShare,
-                          onDrag: (dx) => setState(
-                            () => _textShare =
-                                _shareAtDragStart + dx / box.maxWidth,
-                          ),
+                        width: textWidth,
+                        child: Offstage(
+                          offstage: textWidth == 0,
+                          child: _textPane(scheme),
                         ),
                       ),
-                    // Des clés : la poignée n'existe que dans un des modes, et sans
-                    // elles le graphe serait reconstruit (et sa page ouverte
-                    // perdue) à chaque changement de mode.
-                    Positioned(
-                      key: const ValueKey('pane-graph'),
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: graphWidth,
-                      child: Offstage(
-                        offstage: graphWidth == 0,
-                        child: graph == null
-                            ? const Center(
-                                child: Text(
-                                  "Aucun graphe : le texte n'est pas encore valide.",
+                      if (shown == ViewMode.both)
+                        Positioned(
+                          left: textWidth,
+                          top: 0,
+                          bottom: 0,
+                          width: SplitHandle.thickness,
+                          child: SplitHandle(
+                            key: const Key('split-text-graph'),
+                            axis: Axis.horizontal,
+                            onStart: () => _shareAtDragStart = _textShare,
+                            onDrag: (dx) => setState(
+                              () => _textShare =
+                                  _shareAtDragStart + dx / box.maxWidth,
+                            ),
+                          ),
+                        ),
+                      // Des clés : la poignée n'existe que dans un des modes, et sans
+                      // elles le graphe serait reconstruit (et sa page ouverte
+                      // perdue) à chaque changement de mode.
+                      Positioned(
+                        key: const ValueKey('pane-graph'),
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: graphWidth,
+                        child: Offstage(
+                          offstage: graphWidth == 0,
+                          child: graph == null
+                              ? const Center(
+                                  child: Text(
+                                    "Aucun graphe : le texte n'est pas encore valide.",
+                                  ),
+                                )
+                              : GraphPanel(
+                                  graph: graph,
+                                  layout: _layout!,
+                                  service: _diagnostics.service,
+                                  onGoToPage: _goToPage,
+                                  onGoToMacro: _goToMacro,
+                                  editing: _diagnostics.isValid
+                                      ? GraphEditing(
+                                          text: () => _text.text,
+                                          apply: _applyEdit,
+                                        )
+                                      : null,
+                                  stale: _diagnostics.isValid
+                                      ? null
+                                      : _statusText(),
                                 ),
-                              )
-                            : GraphPanel(
-                                graph: graph,
-                                layout: _layout!,
-                                service: _diagnostics.service,
-                                onGoToPage: _goToPage,
-                                onGoToMacro: _goToMacro,
-                                editing: _diagnostics.isValid
-                                    ? GraphEditing(
-                                        text: () => _text.text,
-                                        apply: _applyEdit,
-                                      )
-                                    : null,
-                                stale: _diagnostics.isValid
-                                    ? null
-                                    : _statusText(),
-                              ),
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),

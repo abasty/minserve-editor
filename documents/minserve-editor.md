@@ -573,7 +573,26 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
    (à la place de `com.example`) ; `./build-linux.sh` (tests, `flutter build linux --release`, archive
    `build/minserve-editor-linux-x64.tar.gz` du dossier `bundle/`, 11 Mo, rien n'est publié) ; documenté
    dans le README. `deploy-editor.sh` (web) n'est pas touché. AppImage ou `.deb` : plus tard si besoin.
-2. **D1, fichier en place** (§11.1), sans les fichiers récents ni la surveillance (D1b ensuite).
+2. **D1, fichier en place (faite, sauf D1b)** : `FileAccess` gagne `savesInPlace` et `save(name, text, {path,
+   saveAs})` qui rend le fichier enregistré (`OpenedFile` a un `path`) ; `FileAccessException` porte les
+   erreurs à montrer (barre de message). Le navigateur garde `BrowserFileAccess` (téléchargement) ; le bureau
+   a `DesktopFileAccess` (`file_access_io.dart`, importé par `file_access_platform.dart` avec
+   `if (dart.library.io)` pour ne rien changer au build web) : sélecteurs du système (`file_picker`, qui
+   s'appuie sur `zenity` ou `kdialog` sous Linux), lecture directe, écriture atomique (fichier voisin puis
+   renommage, lien symbolique suivi). Dans l'éditeur : « Enregistrer » et Ctrl+S réécrivent en place (la
+   première fois d'un nouveau service, le nom est demandé), « Enregistrer sous… » et Ctrl+Maj+S, bouton
+   absent dans le navigateur ; `minserve_editor service.yaml` ouvre un fichier au départ (erreur de lecture
+   : message ; un nom qui n'existe pas : nouveau service qui sera créé à l'enregistrement, avec un message) ;
+   le titre de la fenêtre est « fichier • — Minserve Editor » (widget `Title`) ; à la fermeture de la fenêtre,
+   le moteur Linux (qui traite lui-même `delete-event`) envoie `System.requestAppExit` au cadre
+   d'application ; l'éditeur y répond avec `AppLifecycleListener.onExitRequested` (question s'il reste des
+   modifications). Une première version avec un canal écrit dans `my_application.cc` ne marchait pas : le
+   moteur prend la fermeture avant, ce code natif a été retiré. **Corrigé après essai de l'auteur** (la
+   confirmation ne venait pas ; un fichier inexistant de la ligne de commande ne disait rien). Le
+   sélecteur système et l'enregistrement en place ont été essayés par l'auteur sur un vrai service ; la
+   fermeture corrigée est à réessayer.
+   **D1b, à faire** : fichiers récents et dernier service rouvert (réglages dans `~/.config/minserve-editor/`),
+   surveillance du fichier (modification extérieure : recharger ou garder).
 3. **D2, assets** (§11.2) : lecture et aperçu d'abord, puis liste / choix dans le formulaire, puis glisser-déposer.
 4. **D3, choix parmi §11.3**, selon l'envie.
 
