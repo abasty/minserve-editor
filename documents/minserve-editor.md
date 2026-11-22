@@ -434,7 +434,20 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      liste les pages et les macros qui l'appellent (avec leur nombre) ; toucher une page l'ouvre sur l'onglet
      Écran, une macro la choisit. Comme le serveur développe les macros au chargement, modifier une définition
      met déjà tous ses appels à jour : aucune réécriture n'est nécessaire.
-   - 8e — La bibliothèque de mingets.
+   - **8e — La bibliothèque de mingets (à faire, plan validé)** :
+     - **8e-1, bibliothèque livrée avec l'éditeur** : un fichier `assets/library.yaml`, section `macros:` écrite
+       comme dans un service (forme étendue), donc copier-coller possible dans les deux sens. Contenu de départ
+       (définitions fournies par l'auteur) : cadre 3D, titre sur bandeau, ligne de menu, ligne de saisie.
+       Dans le panneau Mingets, un bouton « Bibliothèque » ouvre la liste des modèles, avec la même mise en
+       page que les mingets du service (aperçu avec arguments d'essai via `mingetPreviewText` appliqué à la
+       définition de la bibliothèque, description). « Utiliser » copie la définition dans `macros:` (même
+       emplacement que l'extraction) puis propose d'insérer l'appel dans la page ouverte (boîte d'arguments
+       de 8c). Si le nom existe déjà : définition identique → réutilisée sans copie ; différente → renommage
+       proposé. Chaque modèle est autonome (pas de dépendance à copier dans cette première version).
+     - **8e-2, bibliothèque personnelle** : « Ajouter à ma bibliothèque » sur un minget du service ; stockage
+       dans le navigateur (même format), plus « Exporter » / « Importer » un fichier `.yaml` de bibliothèque
+       pour la partager ou la sauvegarder. Les modèles personnels s'affichent dans la même liste, avec une
+       étiquette qui les distingue de ceux livrés.
 9. **Édition directe sur l'aperçu** (§5.3).
 
 Les étapes 6 à 8 peuvent s'intervertir selon l'envie : l'aperçu apporte beaucoup à peu de frais
