@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minserve_editor/src/editor_page.dart';
 import 'package:minserve_editor/src/assets.dart';
 import 'package:minserve_editor/src/file_access.dart';
+import 'package:minserve_editor/src/settings.dart';
 
 class FakeFiles implements FileAccess {
   FakeFiles({this.savesInPlace = false});
@@ -26,8 +29,37 @@ class FakeFiles implements FileAccess {
   /// Les assets que « le disque » donne au service enregistré.
   AssetSource? assets;
 
+  /// Le dossier demandé à la dernière recherche d'assets, et ce que répond
+  /// « choisir un dossier ».
+  String? lastFolder;
+  String? chosenFolder;
+
   @override
-  AssetSource? assetsFor(String? servicePath) => assets;
+  AssetSource? assetsFor(String? servicePath, {String? folder}) {
+    lastFolder = folder;
+    return assets;
+  }
+
+  @override
+  Future<String?> chooseFolder(String? start) async => chosenFolder;
+
+  /// Le texte « sur le disque » de chaque chemin (pour `openPath`).
+  final disk = <String, String>{};
+
+  /// Les signaux « le fichier a changé », un par chemin surveillé.
+  final watchers = <String, StreamController<void>>{};
+
+  @override
+  Future<OpenedFile?> openPath(String path) async {
+    final text = disk[path];
+    return text == null
+        ? null
+        : OpenedFile(path.split('/').last, text, path: path);
+  }
+
+  @override
+  Stream<void>? changes(String path) =>
+      (watchers[path] ??= StreamController<void>.broadcast()).stream;
 
   @override
   Future<OpenedFile?> open() async {
@@ -61,6 +93,7 @@ Future<void> pumpEditor(
   OpenedFile? file,
   String? message,
   bool guardClose = false,
+  AppSettings? settings,
 }) async {
   tester.view.physicalSize = const Size(1000, 800);
   tester.view.devicePixelRatio = 1;
@@ -72,6 +105,7 @@ Future<void> pumpEditor(
         initialFile: file,
         startupMessage: message,
         guardClose: guardClose,
+        settings: settings,
       ),
     ),
   );

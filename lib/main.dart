@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'src/editor_page.dart';
 import 'src/file_access.dart';
 import 'src/file_access_platform.dart';
+import 'src/settings.dart';
 
 Future<void> main(List<String> args) async {
   // Sur le bureau, un fichier nommé sur la ligne de commande s'ouvre au départ.
@@ -19,12 +20,40 @@ Future<void> main(List<String> args) async {
   } on FileAccessException catch (e) {
     message = e.message;
   }
-  runApp(MinserveEditorApp(file: file, message: message));
+  final settings = AppSettings(platformSettingsStorage());
+  final files = platformFileAccess();
+  if (file == null && args.isEmpty && files.savesInPlace) {
+    // Sans fichier demandé, on rouvre le dernier service s'il existe encore.
+    final last = settings.recent.firstOrNull;
+    if (last != null) {
+      try {
+        file = await files.openPath(last);
+      } on FileAccessException catch (e) {
+        message = e.message;
+      }
+    }
+  }
+  runApp(
+    MinserveEditorApp(
+      file: file,
+      message: message,
+      files: files,
+      settings: settings,
+    ),
+  );
 }
 
 class MinserveEditorApp extends StatelessWidget {
-  const MinserveEditorApp({super.key, this.file, this.message});
+  const MinserveEditorApp({
+    super.key,
+    this.file,
+    this.message,
+    this.files,
+    this.settings,
+  });
 
+  final FileAccess? files;
+  final AppSettings? settings;
   final OpenedFile? file;
   final String? message;
 
@@ -42,7 +71,8 @@ class MinserveEditorApp extends StatelessWidget {
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
       home: EditorPage(
-        files: platformFileAccess(),
+        files: files,
+        settings: settings,
         initialFile: file,
         startupMessage: message,
         guardClose: isDesktopApp,

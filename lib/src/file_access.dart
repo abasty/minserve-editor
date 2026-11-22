@@ -36,9 +36,22 @@ abstract interface class FileAccess {
   /// chaque enregistrement est un téléchargement (le navigateur).
   bool get savesInPlace;
 
-  /// Les assets du service enregistré à [servicePath], ou `null` si on ne les
-  /// a pas (le navigateur, ou un service pas encore enregistré).
-  AssetSource? assetsFor(String? servicePath);
+  /// Les assets du service enregistré à [servicePath] : ceux du dossier
+  /// [folder] s'il est donné, sinon de `assets/` à côté du service. `null` si
+  /// on ne les a pas (le navigateur, ou un service pas encore enregistré).
+  AssetSource? assetsFor(String? servicePath, {String? folder});
+
+  /// Demande un dossier (à partir de [start]) ; `null` si on annule ou si le
+  /// navigateur ne sait pas.
+  Future<String?> chooseFolder(String? start);
+
+  /// Lit le fichier [path] ; `null` s'il n'existe plus ou si le navigateur ne
+  /// sait pas lire un chemin.
+  Future<OpenedFile?> openPath(String path);
+
+  /// Signale (après une courte pause) que le fichier [path] a peut-être changé
+  /// sur le disque ; `null` si on ne peut pas le surveiller.
+  Stream<void>? changes(String path);
 
   /// Demande un fichier à la personne ; `null` si elle annule.
   Future<OpenedFile?> open();
@@ -62,7 +75,16 @@ class BrowserFileAccess implements FileAccess {
   bool get savesInPlace => false;
 
   @override
-  AssetSource? assetsFor(String? servicePath) => null;
+  AssetSource? assetsFor(String? servicePath, {String? folder}) => null;
+
+  @override
+  Future<String?> chooseFolder(String? start) async => null;
+
+  @override
+  Future<OpenedFile?> openPath(String path) async => null;
+
+  @override
+  Stream<void>? changes(String path) => null;
 
   @override
   Future<OpenedFile?> open() async {

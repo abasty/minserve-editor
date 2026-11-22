@@ -9,23 +9,27 @@ Future<String?> askAsset(
   BuildContext context,
   AssetSource source, {
   String? current,
+  AssetsSetup? setup,
 }) => showDialog<String>(
   context: context,
-  builder: (context) => _AssetDialog(source, current),
+  builder: (context) => _AssetDialog(source, current, setup),
 );
 
 class _AssetDialog extends StatefulWidget {
-  const _AssetDialog(this.source, this.current);
+  const _AssetDialog(this.source, this.current, this.setup);
 
   final AssetSource source;
   final String? current;
+  final AssetsSetup? setup;
 
   @override
   State<_AssetDialog> createState() => _AssetDialogState();
 }
 
 class _AssetDialogState extends State<_AssetDialog> {
-  late final List<String> _all = widget.source.list();
+  late AssetSource _source = widget.source;
+  late List<String> _all = _source.list();
+  late bool _custom = widget.setup?.custom ?? false;
   String _filter = '';
   String? _chosen;
   bool _color = false;
@@ -36,6 +40,26 @@ class _AssetDialogState extends State<_AssetDialog> {
     if (widget.current != null && _all.contains(widget.current)) {
       _chosen = widget.current;
     }
+  }
+
+  void _use(AssetSource? source, {required bool custom}) {
+    if (source == null) return;
+    setState(() {
+      _source = source;
+      _all = source.list();
+      _chosen = null;
+      _filter = '';
+      _custom = custom;
+    });
+  }
+
+  Future<void> _chooseFolder() async {
+    final source = await widget.setup!.choose();
+    if (mounted) _use(source, custom: true);
+  }
+
+  void _resetFolder() {
+    _use(widget.setup!.reset(), custom: false);
   }
 
   List<String> get _shown {
@@ -74,10 +98,30 @@ class _AssetDialogState extends State<_AssetDialog> {
                     onChanged: (v) => setState(() => _filter = v),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    widget.source.label,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _source.label,
+                          key: const Key('asset-folder-label'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (widget.setup != null) ...[
+                        TextButton(
+                          key: const Key('asset-folder'),
+                          onPressed: _chooseFolder,
+                          child: const Text('Dossier…'),
+                        ),
+                        if (_custom)
+                          TextButton(
+                            key: const Key('asset-folder-reset'),
+                            onPressed: _resetFolder,
+                            child: const Text('Par défaut'),
+                          ),
+                      ],
+                    ],
                   ),
                   Expanded(
                     child: shown.isEmpty
@@ -136,7 +180,7 @@ class _AssetDialogState extends State<_AssetDialog> {
     final TMinitel minitel;
     final int size;
     try {
-      final bytes = widget.source.read(path);
+      final bytes = _source.read(path);
       size = bytes.length;
       minitel = TMinitel()..emulate(bytes);
     } on AssetException catch (e) {

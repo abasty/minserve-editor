@@ -554,7 +554,12 @@ extension on _ScreenFormState {
           tooltip: 'Choisir dans les assets',
           icon: const Icon(Icons.folder_open),
           onPressed: () async {
-            final chosen = await askAsset(context, source, current: path);
+            final chosen = await askAsset(
+              context,
+              source,
+              current: path,
+              setup: AssetsScope.setupOf(context),
+            );
             if (chosen != null) set(chosen);
           },
         ),

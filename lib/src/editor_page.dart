@@ -10,6 +10,7 @@ import 'diagnostics.dart';
 import 'file_access.dart';
 import 'graph/graph_panel.dart';
 import 'history.dart';
+import 'settings.dart';
 import 'split_handle.dart';
 import 'graph/layout.dart';
 import 'graph/page_lines.dart';
@@ -45,9 +46,14 @@ class EditorPage extends StatefulWidget {
     this.initialFile,
     this.startupMessage,
     this.guardClose = false,
+    this.settings,
   }) : files = files ?? const BrowserFileAccess();
 
   final FileAccess files;
+
+  /// Ce que l'éditeur retient d'une fois sur l'autre (fichiers récents, dossier
+  /// assets de chaque service).
+  final AppSettings? settings;
 
   /// Le fichier à montrer au départ (nommé sur la ligne de commande) ; sinon
   /// un nouveau service.
@@ -66,6 +72,7 @@ class EditorPage extends StatefulWidget {
 }
 
 class _EditorPageState extends State<EditorPage> {
+  late final _settings = widget.settings ?? AppSettings();
   late final _text = TextEditingController(text: _initialText);
   final _commands = CodeEditorController();
   Timer? _timer;
@@ -102,6 +109,9 @@ class _EditorPageState extends State<EditorPage> {
             : AppExitResponse.cancel,
       );
     }
+    final path = _path;
+    if (path != null) _settings.addRecent(path);
+    _watchPath();
     final message = widget.startupMessage;
     if (message != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _tell(message));
@@ -139,6 +149,7 @@ class _EditorPageState extends State<EditorPage> {
     _typingTimer?.cancel();
     FocusManager.instance.removeListener(_focusChanged);
     _exitListener?.dispose();
+    _watch?.cancel();
     _pageFocus.dispose();
     _text.dispose();
     super.dispose();
@@ -328,9 +339,120 @@ class _EditorPageState extends State<EditorPage> {
       _name = name;
       _path = path;
       _saved = text;
+      _seenOnDisk = null;
       _setDiagnostics(text);
     });
+    if (path != null) _settings.addRecent(path);
+    _watchPath();
   }
+
+  /// Le fichier ouvert est surveillé : quelqu'un d'autre (un autre éditeur, git)
+  /// peut le changer.
+  StreamSubscription<void>? _watch;
+  String? _watched;
+
+  /// Le dernier texte vu sur le disque et laissé de côté (« garder ma version ») :
+  /// on ne redemande pas pour le même.
+  String? _seenOnDisk;
+  bool _asking = false;
+
+  void _watchPath() {
+    if (_path == _watched) return;
+    _watch?.cancel();
+    _watch = null;
+    _watched = _path;
+    final path = _path;
+    if (path != null) {
+      _watch = widget.files.changes(path)?.listen((_) => _diskChanged(path));
+    }
+  }
+
+  Future<void> _diskChanged(String path) async {
+    if (_asking || !mounted || path != _path) return;
+    final OpenedFile? disk;
+    try {
+      disk = await widget.files.openPath(path);
+    } on FileAccessException {
+      return;
+    }
+    if (disk == null || !mounted || path != _path) return;
+    // Notre propre enregistrement, ou un texte déjà vu : rien à faire.
+    if (disk.text == _saved || disk.text == _seenOnDisk) return;
+    if (!_dirty) {
+      _load(disk.name, disk.text, path: path);
+      _tell('« ${disk.name} » a changé sur le disque : rechargé.');
+      return;
+    }
+    _asking = true;
+    final reload = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Le fichier a changé sur le disque'),
+        content: Text(
+          '« ${disk!.name} » a été modifié ailleurs, et vous avez des '
+          'modifications non enregistrées. Recharger les perd.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('keep-mine'),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Garder ma version'),
+          ),
+          FilledButton(
+            key: const Key('reload-disk'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Recharger'),
+          ),
+        ],
+      ),
+    );
+    _asking = false;
+    if (!mounted || path != _path) return;
+    if (reload == true) {
+      _load(disk.name, disk.text, path: path);
+    } else {
+      _seenOnDisk = disk.text;
+    }
+  }
+
+  Future<void> _openRecent(String path) async {
+    if (!await _confirmDiscard()) return;
+    try {
+      final file = await widget.files.openPath(path);
+      if (file == null) {
+        _settings.removeRecent(path);
+        if (mounted) setState(() {});
+        _tell('Fichier introuvable : $path');
+        return;
+      }
+      _load(file.name, file.text, path: file.path);
+    } on FileAccessException catch (e) {
+      _tell(e.message);
+    }
+  }
+
+  AssetSource? get _assetSource => widget.files.assetsFor(
+    _path,
+    folder: _path == null ? null : _settings.assetsFolders[_path],
+  );
+
+  AssetsSetup? get _assetsSetup => _path == null || !widget.files.savesInPlace
+      ? null
+      : AssetsSetup(
+          custom: _settings.assetsFolders.containsKey(_path),
+          choose: () async {
+            final folder = await widget.files.chooseFolder(_assetSource?.label);
+            if (folder == null || _path == null) return null;
+            _settings.setAssetsFolder(_path!, folder);
+            if (mounted) setState(() {});
+            return _assetSource;
+          },
+          reset: () {
+            if (_path != null) _settings.setAssetsFolder(_path!, null);
+            if (mounted) setState(() {});
+            return _assetSource;
+          },
+        );
 
   Future<void> _new() async {
     if (await _confirmDiscard()) _load('service.yaml', newServiceText);
@@ -363,6 +485,9 @@ class _EditorPageState extends State<EditorPage> {
         _name = file.name;
         _path = file.path;
       });
+      final saved = file.path;
+      if (saved != null) _settings.addRecent(saved);
+      _watchPath();
     } on FileAccessException catch (e) {
       _tell(e.message);
     }
@@ -377,7 +502,8 @@ class _EditorPageState extends State<EditorPage> {
       title: '${_dirty ? '• ' : ''}$_name — Minserve Editor',
       color: scheme.primary,
       child: AssetsScope(
-        source: widget.files.assetsFor(_path),
+        source: _assetSource,
+        setup: _assetsSetup,
         child: CallbackShortcuts(
           // Notre historique remplace celui du champ de texte, qui ne voit pas les
           // modifications du graphe.
@@ -490,6 +616,33 @@ class _EditorPageState extends State<EditorPage> {
                       icon: const Icon(Icons.folder_open),
                       onPressed: _open,
                     ),
+                    if (widget.files.savesInPlace &&
+                        _settings.recent.isNotEmpty)
+                      PopupMenuButton<String>(
+                        key: const Key('recent'),
+                        tooltip: 'Fichiers récents',
+                        icon: const Icon(Icons.history),
+                        onSelected: (path) => path.isEmpty
+                            ? setState(_settings.clearRecent)
+                            : _openRecent(path),
+                        itemBuilder: (context) => [
+                          for (final path in _settings.recent)
+                            PopupMenuItem(
+                              key: Key('recent-$path'),
+                              value: path,
+                              child: Text(
+                                path,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            key: Key('recent-clear'),
+                            value: '',
+                            child: Text('Vider la liste'),
+                          ),
+                        ],
+                      ),
                     IconButton(
                       tooltip: 'Enregistrer',
                       icon: const Icon(Icons.save_alt),

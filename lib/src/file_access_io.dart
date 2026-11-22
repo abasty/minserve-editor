@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'assets.dart';
 import 'file_access.dart';
+import 'settings.dart';
 
 /// Le bureau : le fichier ouvert est réécrit en place.
 FileAccess platformFileAccess() =>
@@ -77,11 +79,55 @@ class DesktopFileAccess implements FileAccess {
   bool get savesInPlace => true;
 
   @override
-  AssetSource? assetsFor(String? servicePath) => servicePath == null
+  AssetSource? assetsFor(String? servicePath, {String? folder}) =>
+      servicePath == null
       ? null
       : DirectoryAssets(
-          Directory('${File(servicePath).absolute.parent.path}/assets'),
+          Directory(
+            folder ?? '${File(servicePath).absolute.parent.path}/assets',
+          ),
         );
+
+  @override
+  Future<String?> chooseFolder(String? start) =>
+      FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Dossier des assets',
+        initialDirectory: start,
+      );
+
+  @override
+  Future<OpenedFile?> openPath(String path) async {
+    if (!File(path).existsSync()) return null;
+    return readServiceFile(path);
+  }
+
+  @override
+  Stream<void>? changes(String path) {
+    final file = File(path).absolute;
+    final directory = file.parent;
+    if (!directory.existsSync()) return null;
+    StreamSubscription<FileSystemEvent>? subscription;
+    Timer? pause;
+    late final StreamController<void> controller;
+    controller = StreamController<void>(
+      onListen: () {
+        // On surveille le dossier : « Enregistrer » remplace le fichier par un
+        // renommage, qu'une surveillance du fichier seul ne verrait pas.
+        subscription = directory.watch().listen((_) {
+          pause?.cancel();
+          pause = Timer(
+            const Duration(milliseconds: 300),
+            () => controller.add(null),
+          );
+        }, onError: (_) {});
+      },
+      onCancel: () {
+        pause?.cancel();
+        return subscription?.cancel();
+      },
+    );
+    return controller.stream;
+  }
 
   @override
   Future<OpenedFile?> open() async {
@@ -207,5 +253,34 @@ class DirectoryAssets implements AssetSource {
     } on FileSystemException {
       throw AssetException('fichier illisible : $path');
     }
+  }
+}
+
+/// Le fichier de réglages : `settings.json` dans `~/.config/minserve-editor/`
+/// (ou `$XDG_CONFIG_HOME`).
+SettingsStorage? platformSettingsStorage() {
+  if (!isDesktopApp) return null;
+  final env = Platform.environment;
+  final base =
+      env['XDG_CONFIG_HOME'] ??
+      (env['HOME'] != null ? '${env['HOME']}/.config' : env['APPDATA']);
+  return base == null
+      ? null
+      : FileSettingsStorage(File('$base/minserve-editor/settings.json'));
+}
+
+class FileSettingsStorage implements SettingsStorage {
+  const FileSettingsStorage(this.file);
+
+  final File file;
+
+  @override
+  String? read() => file.existsSync() ? file.readAsStringSync() : null;
+
+  @override
+  void write(String text) {
+    file.parent.createSync(recursive: true);
+    final temp = File('${file.path}.tmp')..writeAsStringSync(text, flush: true);
+    temp.renameSync(file.path);
   }
 }

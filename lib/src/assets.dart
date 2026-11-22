@@ -59,16 +59,46 @@ class MapAssets implements AssetSource {
   }
 }
 
+/// Ce que la personne peut régler pour les assets du service ouvert : choisir un
+/// autre dossier, ou revenir à `assets/` à côté du service.
+class AssetsSetup {
+  const AssetsSetup({
+    required this.choose,
+    required this.reset,
+    required this.custom,
+  });
+
+  /// Demande un dossier ; rend les assets de ce dossier, ou `null` si on
+  /// annule.
+  final Future<AssetSource?> Function() choose;
+
+  /// Revient au dossier par défaut et rend ses assets.
+  final AssetSource? Function() reset;
+
+  /// Vrai si le dossier a été choisi (ce n'est pas celui par défaut).
+  final bool custom;
+}
+
 /// Donne aux aperçus les assets du service ouvert (ou rien : ils ne sont pas
 /// disponibles, dans le navigateur par exemple).
 class AssetsScope extends InheritedWidget {
-  const AssetsScope({super.key, required this.source, required super.child});
+  const AssetsScope({
+    super.key,
+    required this.source,
+    this.setup,
+    required super.child,
+  });
 
   final AssetSource? source;
+  final AssetsSetup? setup;
+
+  static AssetsSetup? setupOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AssetsScope>()?.setup;
 
   static AssetSource? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AssetsScope>()?.source;
 
   @override
-  bool updateShouldNotify(AssetsScope old) => old.source != source;
+  bool updateShouldNotify(AssetsScope old) =>
+      old.source != source || old.setup?.custom != setup?.custom;
 }

@@ -591,8 +591,18 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
    confirmation ne venait pas ; un fichier inexistant de la ligne de commande ne disait rien). Le
    sélecteur système et l'enregistrement en place ont été essayés par l'auteur sur un vrai service ; la
    fermeture corrigée est à réessayer.
-   **D1b, à faire** : fichiers récents et dernier service rouvert (réglages dans `~/.config/minserve-editor/`),
-   surveillance du fichier (modification extérieure : recharger ou garder).
+   **D1b (faite)** : `lib/src/settings.dart` (`AppSettings`, `SettingsStorage`) garde dans
+   `~/.config/minserve-editor/settings.json` (ou `$XDG_CONFIG_HOME`) les 10 derniers fichiers et le dossier
+   assets de chaque service ; illisible ou non écrivable, il est ignoré sans bruit ; rien dans le
+   navigateur. Un menu « Fichiers récents » (icône historique, bureau seulement, avec « Vider la liste »)
+   rouvre un fichier (retiré de la liste s'il a disparu). Sans fichier demandé en ligne de commande,
+   l'éditeur rouvre le dernier service s'il existe encore. L'éditeur surveille le dossier du fichier ouvert
+   (`FileAccess.changes`, car « Enregistrer » remplace le fichier par un renommage) : après une pause de
+   300 ms il relit le fichier ; si son texte est celui qu'on a enregistré ou déjà écarté, rien ; sinon, sans
+   modification en cours il recharge avec un message, avec des modifications il demande « Garder ma
+   version » ou « Recharger » (et ne redemande pas pour le même texte). Recharger efface l'historique
+   défaire / refaire. **Non essayé à la main** : la surveillance réelle n'a été vérifiée que par un test
+   avec un dossier temporaire.
 3. **D2, assets** (§11.2), en trois temps :
    - **D2a, lire les assets pour l'aperçu (faite)** : `lib/src/assets.dart` (`AssetSource`, `AssetException`,
      `MapAssets`, `AssetsScope`) ; `FileAccess.assetsFor(chemin du service)` rend `DirectoryAssets` sur le
@@ -607,9 +617,10 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
      filtrable, écran Videotex du fichier choisi avec bascule couleur / gris, taille) et, sous le champ,
      la taille du fichier ou la raison qui empêche de le lire (introuvable, hors du dossier, trop gros).
      Rien de tout cela dans le navigateur (pas de source d'assets).
-   - **D2b-2, à faire avec D1b (il faut des réglages mémorisés)** : choisir un autre dossier assets que
-     `assets/` à côté du service (la configuration du serveur peut le placer ailleurs), mémorisé par service
-     dans `~/.config/minserve-editor/`.
+   - **D2b-2, dossier assets au choix (faite avec D1b)** : dans la fenêtre « Choisir un fichier », « Dossier… »
+     choisit un autre dossier que `assets/` à côté du service (la configuration du serveur peut le placer
+     ailleurs), « Par défaut » y revient ; le choix est mémorisé par service (chemin du `service.yaml`).
+     `AssetsSetup` (dans `AssetsScope`) porte ces deux actions.
    - **D2c, à faire** : glisser-déposer d'un fichier dans l'éditeur (copie dans `assets/`, sans écraser sans
      confirmation).
 4. **D3, choix parmi §11.3**, selon l'envie.
