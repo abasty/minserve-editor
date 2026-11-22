@@ -59,6 +59,13 @@ Le paquet `minserve_core` est pris par chemin local : le dépôt
 et les polices sont servis avec l'application, rien n'est chargé depuis les serveurs de Google.
 La police de l'éditeur (DejaVu Sans Mono, licence Bitstream Vera) est embarquée dans `assets/fonts/`.
 
+## Application Linux
+
+Le même code compile en application de bureau (plan : `documents/minserve-editor.md` §11).
+`./build-linux.sh` lance les tests, compile (`flutter build linux --release`) et range le dossier
+`bundle` dans `build/minserve-editor-linux-x64.tar.gz` : décompresser, puis lancer `minserve-editor/minserve_editor`
+(l'exécutable, `data/` et `lib/` restent ensemble). Il faut GTK 3 sur la machine ; rien n'est publié.
+
 ## Documentation
 
 - [documents/minserve-editor.md](documents/minserve-editor.md) : le but, l'architecture, les

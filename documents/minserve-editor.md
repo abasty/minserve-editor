@@ -568,11 +568,11 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
 
 ### 11.4 Étapes
 
-1. **D0, mise en ordre** : committer `linux/` ; rétablir dans `.metadata` l'entrée de la plateforme
-   `web` (écrasée par `flutter create`) ; `linux/**` exclu de l'analyse (déjà fait) ; titre de fenêtre
-   (`my_application.cc`) et nom du paquet ; documenter la construction (`flutter build linux`) et vérifier
-   que `deploy-editor.sh` (web) n'est pas touché ; choisir le moyen de distribution (archive `tar.gz` du
-   dossier `bundle/`, puis éventuellement AppImage ou `.deb`).
+1. **D0, mise en ordre (faite)** : `linux/` ajouté (exclu de l'analyse) ; entrée `web` rétablie dans
+   `.metadata` ; titre de la fenêtre « Minserve Editor » et identifiant `io.github.abasty.minserve_editor`
+   (à la place de `com.example`) ; `./build-linux.sh` (tests, `flutter build linux --release`, archive
+   `build/minserve-editor-linux-x64.tar.gz` du dossier `bundle/`, 11 Mo, rien n'est publié) ; documenté
+   dans le README. `deploy-editor.sh` (web) n'est pas touché. AppImage ou `.deb` : plus tard si besoin.
 2. **D1, fichier en place** (§11.1), sans les fichiers récents ni la surveillance (D1b ensuite).
 3. **D2, assets** (§11.2) : lecture et aperçu d'abord, puis liste / choix dans le formulaire, puis glisser-déposer.
 4. **D3, choix parmi §11.3**, selon l'envie.
