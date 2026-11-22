@@ -7,8 +7,9 @@ import 'package:minserve_core/minserve_core.dart';
 import 'package:minserve_editor/src/assets.dart';
 import 'package:minserve_editor/src/file_access_io.dart';
 import 'package:minserve_editor/src/preview/page_preview.dart';
+import 'package:minterm_view/minterm_view.dart';
 
-import 'editor_page_test.dart' show FakeFiles, pumpEditor;
+import 'editor_page_test.dart' show FakeFiles, pumpEditor, codeText;
 import 'page_preview_test.dart' show line;
 
 const _service = '''
@@ -75,6 +76,82 @@ void main() {
     expect(text.data, isNot(contains('logo.vdt')));
   });
 
+  testWidgets(
+    'le formulaire affiche : état du fichier et choix dans la liste',
+    (tester) async {
+      final files = FakeFiles(savesInPlace: true)
+        ..assets = MapAssets({
+          'logo.vdt': _logo,
+          'jeux/pirate.vdt': Uint8List.fromList([0x1F, 0x43, 0x41, 0x4F]),
+        });
+      await pumpEditor(tester, files);
+      await tester.enterText(find.byKey(const Key('code')), _service);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byKey(const Key('node-a')));
+      await tester.pump();
+      final tab = find.descendant(
+        of: find.byKey(const Key('page-tabs')),
+        matching: find.text('Écran'),
+      );
+      await tester.ensureVisible(tab);
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+      String status(int i) => tester
+          .widget<Text>(find.byKey(Key('screen-a-$i-affiche-status')))
+          .data!;
+      expect(status(1), '6 octets');
+      expect(status(2), 'fichier introuvable dans assets : dessous/autre.vdt');
+      // Le choix : la liste, un filtre, l'écran du fichier, puis « Choisir ».
+      final pick = find.byKey(const Key('screen-a-2-affiche-pick'));
+      await tester.ensureVisible(pick);
+      await tester.tap(pick);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('asset-logo.vdt')), findsOneWidget);
+      expect(find.byKey(const Key('asset-jeux/pirate.vdt')), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('asset-filter')), 'pir');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('asset-logo.vdt')), findsNothing);
+      await tester.tap(find.byKey(const Key('asset-jeux/pirate.vdt')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('asset-preview')), findsOneWidget);
+      // Niveaux de gris par défaut ; la palette passe en couleur.
+      expect(
+        tester.widget<MinitelView>(find.byType(MinitelView)).colors,
+        MinGrey,
+      );
+      await tester.tap(find.byKey(const Key('asset-colors')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<MinitelView>(find.byType(MinitelView)).colors,
+        MinColors,
+      );
+      await tester.tap(find.byKey(const Key('dialog-ok')));
+      await tester.pumpAndSettle();
+      expect(codeText(tester), contains('affiche: "jeux/pirate.vdt"'));
+      expect(status(2), '4 octets');
+    },
+  );
+
+  testWidgets('sans assets (navigateur) : pas de bouton, pas d\'état', (
+    tester,
+  ) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), _service);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump();
+    final tab = find.descendant(
+      of: find.byKey(const Key('page-tabs')),
+      matching: find.text('Écran'),
+    );
+    await tester.ensureVisible(tab);
+    await tester.tap(tab);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('screen-a-1-affiche')), findsOneWidget);
+    expect(find.byKey(const Key('screen-a-1-affiche-pick')), findsNothing);
+    expect(find.byKey(const Key('screen-a-1-affiche-status')), findsNothing);
+  });
+
   group('dossier du disque', () {
     late Directory dir;
     late DirectoryAssets assets;
@@ -118,6 +195,13 @@ void main() {
       File('${dir.path}/service/assets/gros.vdt')
           .writeAsBytesSync(Uint8List(maxAssetSize + 1));
       expect(reason('gros.vdt'), startsWith('fichier trop gros'));
+    });
+
+    test('la liste : tous les fichiers, sans ceux qui sortent du dossier', () {
+      Link('${dir.path}/service/assets/lien.vdt')
+          .createSync('${dir.path}/secret.vdt');
+      expect(assets.list(), ['dessous/autre.vdt', 'logo.vdt']);
+      expect(DirectoryAssets(Directory('${dir.path}/rien')).list(), isEmpty);
     });
 
     test('un dossier assets absent : on le dit', () {

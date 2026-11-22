@@ -4,6 +4,8 @@ import 'package:minserve_core/minserve_core.dart'
     show MacroDefinition, MacroType, yamlString;
 import 'package:yaml/yaml.dart';
 
+import '../assets.dart';
+import 'asset_dialog.dart';
 import 'color_pick.dart';
 import 'extract_dialog.dart';
 import 'macro_call.dart';
@@ -480,6 +482,9 @@ extension on _ScreenFormState {
         ),
       ]);
     }
+    if (name == 'affiche' && value is YamlMap && value.length == 1) {
+      return row(_afficheFields(item, '${value[name] ?? ''}'));
+    }
     final textLabel = _texts[name];
     if (textLabel != null && value is YamlMap && value.length == 1) {
       return row([
@@ -512,6 +517,63 @@ extension on _ScreenFormState {
       return row([for (final p in params) _param(item, name, map, p)]);
     }
     return null;
+  }
+
+  /// Le champ du fichier d'une instruction `affiche`, avec — quand on a le
+  /// dossier assets du service — un bouton pour le choisir dans la liste et
+  /// l'état du fichier (sa taille, ou pourquoi on ne peut pas le lire).
+  List<Widget> _afficheFields(ScreenItem item, String path) {
+    final source = AssetsScope.of(context);
+    bool set(String v) => apply(
+      (t) =>
+          replaceScreenItem(t, page, item.index, 'affiche: ${yamlString(v)}'),
+    );
+    String? problem;
+    int? size;
+    if (source != null && path.isNotEmpty) {
+      try {
+        size = source.read(path).length;
+      } on AssetException catch (e) {
+        problem = e.message;
+      }
+    }
+    return [
+      SizedBox(
+        width: 320,
+        child: CommitField(
+          key: Key('screen-$page-${item.index}-affiche'),
+          width: double.infinity,
+          label: 'Fichier',
+          value: path,
+          onCommit: set,
+        ),
+      ),
+      if (source != null)
+        IconButton(
+          key: Key('screen-$page-${item.index}-affiche-pick'),
+          tooltip: 'Choisir dans les assets',
+          icon: const Icon(Icons.folder_open),
+          onPressed: () async {
+            final chosen = await askAsset(context, source, current: path);
+            if (chosen != null) set(chosen);
+          },
+        ),
+      if (size != null)
+        Text(
+          '$size octets',
+          key: Key('screen-$page-${item.index}-affiche-status'),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      if (problem != null)
+        Text(
+          problem,
+          key: Key('screen-$page-${item.index}-affiche-status'),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+            fontSize: 12,
+          ),
+        ),
+    ];
   }
 
   /// Les champs d'un appel de macro : son nom puis un champ par paramètre, avec

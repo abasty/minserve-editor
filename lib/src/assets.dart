@@ -25,6 +25,10 @@ abstract interface class AssetSource {
   /// Le contenu de [path] (relatif au dossier, avec des `/`). Lève
   /// [AssetException] s'il ne peut pas être lu.
   Uint8List read(String path);
+
+  /// Les chemins de tous les fichiers du dossier (sous-dossiers compris, avec
+  /// des `/`), triés.
+  List<String> list();
 }
 
 /// Des assets en mémoire (les essais ; plus tard des fichiers choisis dans le
@@ -36,6 +40,9 @@ class MapAssets implements AssetSource {
 
   @override
   final String label;
+
+  @override
+  List<String> list() => files.keys.toList()..sort();
 
   @override
   Uint8List read(String path) {

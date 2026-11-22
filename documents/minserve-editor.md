@@ -601,9 +601,15 @@ Classées de la plus utile à la plus lourde ; aucune n'est décidée.
      pour un service pas encore enregistré. `renderPreview(..., source:)` lit les `affiche` ; un fichier
      illisible n'arrête pas l'aperçu, la note « Fichiers affiche non montrés (dossier …) » donne la raison de
      chacun. `AssetsScope` (dans `EditorPage`) évite de faire passer la source dans tout le graphe.
-   - **D2b, à faire** : réglage du dossier assets (choisir un autre dossier, mémorisé par service), liste des
-     assets, choix d'un fichier dans le formulaire de l'instruction `affiche` avec aperçu du `.vdt`,
-     signalement d'un chemin introuvable dans l'éditeur.
+   - **D2b, liste et choix d'un fichier (faite)** : `AssetSource.list()` (tous les fichiers, sous-dossiers
+     compris, sans ceux que `read` refuserait, 5000 au plus) ; dans l'onglet Écran, l'instruction `affiche`
+     montre son champ « Fichier », un bouton « Choisir dans les assets » (`asset_dialog.dart` : liste
+     filtrable, écran Videotex du fichier choisi avec bascule couleur / gris, taille) et, sous le champ,
+     la taille du fichier ou la raison qui empêche de le lire (introuvable, hors du dossier, trop gros).
+     Rien de tout cela dans le navigateur (pas de source d'assets).
+   - **D2b-2, à faire avec D1b (il faut des réglages mémorisés)** : choisir un autre dossier assets que
+     `assets/` à côté du service (la configuration du serveur peut le placer ailleurs), mémorisé par service
+     dans `~/.config/minserve-editor/`.
    - **D2c, à faire** : glisser-déposer d'un fichier dans l'éditeur (copie dans `assets/`, sans écraser sans
      confirmation).
 4. **D3, choix parmi §11.3**, selon l'envie.

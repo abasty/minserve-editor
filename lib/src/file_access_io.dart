@@ -135,8 +135,41 @@ class DirectoryAssets implements AssetSource {
   @override
   int get hashCode => directory.path.hashCode;
 
+  /// Au plus ce nombre de fichiers : un dossier énorme ne doit pas figer la
+  /// liste.
+  static const maxListed = 5000;
+
   @override
-  Uint8List read(String path) {
+  List<String> list() {
+    final String root;
+    try {
+      root = directory.resolveSymbolicLinksSync();
+    } on FileSystemException {
+      return const [];
+    }
+    final found = <String>[];
+    try {
+      for (final entity in Directory(root).listSync(recursive: true)) {
+        if (entity is! File) continue;
+        final relative = entity.path.substring(root.length + 1);
+        // Les mêmes refus que `read` : un lien qui sort du dossier n'est pas
+        // proposé.
+        try {
+          _resolve(relative);
+        } on AssetException {
+          continue;
+        }
+        found.add(relative.replaceAll(Platform.pathSeparator, '/'));
+        if (found.length >= maxListed) break;
+      }
+    } on FileSystemException {
+      // Un sous-dossier illisible : on montre ce qu'on a.
+    }
+    return found..sort();
+  }
+
+  /// Le vrai fichier de [path], après les contrôles du serveur (hors lecture).
+  File _resolve(String path) {
     final String root;
     try {
       root = directory.resolveSymbolicLinksSync();
@@ -158,7 +191,12 @@ class DirectoryAssets implements AssetSource {
     if (FileSystemEntity.typeSync(real) != FileSystemEntityType.file) {
       throw AssetException('pas un fichier : $path');
     }
-    final file = File(real);
+    return File(real);
+  }
+
+  @override
+  Uint8List read(String path) {
+    final file = _resolve(path);
     try {
       if (file.lengthSync() > maxAssetSize) {
         throw AssetException(
