@@ -448,6 +448,18 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
        le service » ou « différent ». « Ajouter au service » (`addLibraryMacro`) copie la définition, commentaires
        compris, à la suite des macros (ou dans une section `macros:` avant `pages:`) ; si le service a déjà un
        minget de même nom mais différent, un autre nom est demandé ; s'il est identique, rien n'est copié.
+     - **Navigation du volet (faite après 8e-1, sur une remarque de l'auteur)** : une barre d'onglets fixe en
+       haut du volet de droite, `Graphe | Page « x » ✕ | Mingets (n)`, remplace les boutons « ← Graphe » et le
+       bouton Mingets de la barre d'outils. Les trois vues gardent leur état en changeant de vue (graphe :
+       sélection et position ; page : instruction choisie, onglet ; mingets : choix et arguments d'essai,
+       le panneau reste dans l'arbre sous un `IndexedStack`). L'onglet Page n'existe que si une page est
+       ouverte (un seul à la fois ; ouvrir une autre page le remplace ; ✕ le ferme) ; toucher une autre page
+       dans le graphe ne le change pas. « Ouvrir la page » est un vrai bouton (plus d'icône seule). L'onglet
+       « Aperçu » de la page devient « Résumé » ; « Rendu » reste dans les détails du graphe. Mingets : une seule
+       liste à deux sections, « Du service (n) » puis « Bibliothèque (m) » (marques : à ajouter, déjà dans le
+       service, différent), le bascule service / bibliothèque disparaît ; un modèle choisi dit s'il est déjà dans le
+       service et propose « Ajouter au service ». Les tests ouvrent une fenêtre de 900 px de haut (la barre ajoute
+       44 px).
      - **8e-1b, à faire** : proposer les mingets de la bibliothèque dans le sélecteur d'instruction de l'onglet
        Écran (les ajouter au service au moment de les insérer, en une seule modification).
      - **8e-2, bibliothèque personnelle** : « Ajouter à ma bibliothèque » sur un minget du service ; stockage

@@ -209,7 +209,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const Key('node-a')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+    expect(find.byKey(const Key('close-page')), findsOneWidget);
     // Texte seul, puis graphe seul, puis les deux : la page reste ouverte.
     for (final icon in [
       Icons.code,
@@ -218,10 +218,15 @@ void main() {
       Icons.code,
       Icons.vertical_split,
     ]) {
-      await tester.tap(find.byIcon(icon).first);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('view-mode')),
+          matching: find.byIcon(icon),
+        ),
+      );
       await tester.pumpAndSettle();
       if (icon != Icons.code) {
-        expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+        expect(find.byKey(const Key('close-page')), findsOneWidget);
         expect(find.byKey(const Key('node-a')), findsNothing);
       }
     }

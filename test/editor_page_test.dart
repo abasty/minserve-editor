@@ -95,7 +95,7 @@ Future<void> pumpEditor(
   bool guardClose = false,
   AppSettings? settings,
 }) async {
-  tester.view.physicalSize = const Size(1000, 800);
+  tester.view.physicalSize = const Size(1000, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -110,6 +110,12 @@ Future<void> pumpEditor(
     ),
   );
 }
+
+/// Un onglet de la barre « Graphe / Page / Mingets » (par le début de son nom).
+Finder viewTab(String label) => find.descendant(
+  of: find.byKey(const Key('view-tabs')),
+  matching: find.textContaining(label),
+);
 
 String status(WidgetTester tester) => tester
     .widget<Text>(

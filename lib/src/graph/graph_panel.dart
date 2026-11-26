@@ -34,6 +34,9 @@ enum _PageTab { overview, rules, input, access, screen, preview }
 /// Ce que montre l'aperçu d'une page quand une instruction est choisie.
 enum _Scope { page, upTo, only }
 
+/// Les trois vues du volet, toujours accessibles par la barre du haut.
+enum _View { graph, page, mingets }
+
 class GraphPanel extends StatefulWidget {
   const GraphPanel({
     super.key,
@@ -76,18 +79,18 @@ class _GraphPanelState extends State<GraphPanel> {
   bool _fitted = false;
   String? _selected;
 
-  /// La page ouverte en grand (mode « contextuel page » : son rendu en haut,
-  /// ses propriétés en bas, à la place du graphe), ou `null`.
+  /// La page ouverte en grand (vue « Page » : son rendu en haut, ses propriétés
+  /// en bas), ou `null`. Elle reste ouverte quand on regarde une autre vue.
   String? _open;
+
+  /// La vue montrée : le graphe, la page ouverte ou les mingets.
+  _View _mode = _View.graph;
 
   /// Aperçu en couleur ou en niveaux de gris (par défaut).
   bool _previewColor = false;
 
   /// Le panneau des données de test est ouvert ; leurs valeurs (variables).
   bool _dataOpen = false;
-
-  /// Le panneau des mingets (les macros du service) est ouvert.
-  bool _mingetsOpen = false;
 
   /// L'instruction choisie dans l'onglet Écran, et ce que l'aperçu en montre :
   /// la page entière, l'écran jusqu'à elle, ou elle seule.
@@ -136,7 +139,11 @@ class _GraphPanelState extends State<GraphPanel> {
       });
     }
     if (!widget.graph.nodes.containsKey(_selected)) _selected = null;
-    if (!widget.graph.nodes.containsKey(_open)) _open = null;
+    if (!widget.graph.nodes.containsKey(_open)) {
+      _open = null;
+      if (_mode == _View.page) _mode = _View.graph;
+    }
+    if (widget.service == null && _mode == _View.mingets) _mode = _View.graph;
     _marked = _marked.intersection(widget.graph.nodes.keys.toSet());
   }
 
@@ -174,29 +181,103 @@ class _GraphPanelState extends State<GraphPanel> {
   void _select(String? name, {bool center = false}) {
     setState(() {
       _selected = name;
-      if (_open != null && name != null && name != _open) {
+      if (_mode == _View.page && name != null && name != _open) {
         _open = name;
         _instr = null;
       }
     });
-    if (center && name != null && _open == null) _center(name);
+    if (center && name != null && _mode != _View.page) _center(name);
   }
 
   void _openPage(String name) => setState(() {
     _selected = name;
     _open = name;
+    _mode = _View.page;
     _instr = null;
   });
 
-  /// Revient au graphe, centré sur la page qu'on quitte.
-  void _closePage() {
-    final name = _open;
-    setState(() => _open = null);
+  /// Montre le graphe, centré sur la page qu'on quitte s'il y en avait une.
+  void _showGraph() {
+    final name = _mode == _View.page ? _open : null;
+    setState(() => _mode = _View.graph);
     if (name != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _center(name);
       });
     }
+  }
+
+  /// Ferme la page ouverte (l'onglet « Page ») et revient au graphe.
+  void _closePage() {
+    final name = _open;
+    setState(() {
+      _open = null;
+      _mode = _View.graph;
+    });
+    if (name != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _center(name);
+      });
+    }
+  }
+
+  /// La barre qui ne bouge pas : le graphe, la page ouverte, les mingets.
+  Widget _viewBar() {
+    final macros = widget.service?.macros.length ?? 0;
+    final open = _open;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+      child: Row(
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<_View>(
+                key: const Key('view-tabs'),
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: [
+                  const ButtonSegment(
+                    value: _View.graph,
+                    icon: Icon(Icons.account_tree_outlined, size: 18),
+                    label: Text('Graphe'),
+                  ),
+                  if (open != null)
+                    ButtonSegment(
+                      value: _View.page,
+                      icon: const Icon(Icons.description_outlined, size: 18),
+                      label: Text('Page « $open »'),
+                    ),
+                  ButtonSegment(
+                    value: _View.mingets,
+                    icon: const Icon(Icons.widgets_outlined, size: 18),
+                    label: Text('Mingets ($macros)'),
+                    enabled: widget.service != null,
+                  ),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (v) {
+                  final view = v.single;
+                  if (view == _View.graph) {
+                    _showGraph();
+                  } else {
+                    setState(() => _mode = view);
+                  }
+                },
+              ),
+            ),
+          ),
+          if (open != null)
+            IconButton(
+              key: const Key('close-page'),
+              tooltip: 'Fermer la page « $open »',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: _closePage,
+            ),
+        ],
+      ),
+    );
   }
 
   void _tapNode(String name) {
@@ -350,51 +431,28 @@ class _GraphPanelState extends State<GraphPanel> {
     final deadEnds = graph.deadEnds;
     final unreachable = graph.unreachable;
     final matches = _matches;
-    final open = _open;
     final service = widget.service;
-    if (_mingetsOpen && service != null) {
-      return MingetPanel(
-        service: service,
-        text: widget.editing?.text(),
-        onBack: () => setState(() => _mingetsOpen = false),
-        onGoToMacro: widget.onGoToMacro,
-        onOpenPage: (page) => setState(() {
-          _mingetsOpen = false;
-          _selected = page;
-          _open = page;
-          _instr = null;
-          _tab = _PageTab.screen;
-        }),
-        editing: widget.editing,
-        color: _previewColor,
-        onColorChanged: (v) => setState(() => _previewColor = v),
-        variables: _testVars,
-      );
-    }
-    return Column(
+    final open = _mode == _View.page ? _open : null;
+    final mingets = service == null
+        ? const SizedBox.shrink()
+        : MingetPanel(
+            service: service,
+            text: widget.editing?.text(),
+            onGoToMacro: widget.onGoToMacro,
+            onOpenPage: (page) => setState(() {
+              _mode = _View.page;
+              _selected = page;
+              _open = page;
+              _instr = null;
+              _tab = _PageTab.screen;
+            }),
+            editing: widget.editing,
+            color: _previewColor,
+            onColorChanged: (v) => setState(() => _previewColor = v),
+            variables: _testVars,
+          );
+    final body = Column(
       children: [
-        if (widget.stale != null)
-          Material(
-            color: Theme.of(context).colorScheme.tertiaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  const Icon(Icons.history, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Texte invalide : graphe du dernier texte valide '
-                      '(${widget.stale})',
-                      key: const Key('stale'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         if (open != null && widget.service != null) ...[
           _pageBar(open),
           Expanded(
@@ -464,6 +522,40 @@ class _GraphPanelState extends State<GraphPanel> {
             _details(_selected!),
           ],
         ],
+      ],
+    );
+    return Column(
+      children: [
+        if (widget.stale != null)
+          Material(
+            color: Theme.of(context).colorScheme.tertiaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.history, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Texte invalide : graphe du dernier texte valide '
+                      '(${widget.stale})',
+                      key: const Key('stale'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (service != null) _viewBar(),
+        Expanded(
+          child: IndexedStack(
+            sizing: StackFit.expand,
+            index: _mode == _View.mingets ? 1 : 0,
+            children: [body, mingets],
+          ),
+        ),
       ],
     );
   }
@@ -551,16 +643,6 @@ class _GraphPanelState extends State<GraphPanel> {
               spacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                TextButton.icon(
-                  key: const Key('back-to-graph'),
-                  onPressed: _closePage,
-                  icon: const Icon(Icons.arrow_back, size: 18),
-                  label: const Text('Graphe'),
-                ),
-                Text(
-                  'Page « $name »',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
                 if (_tab == _PageTab.screen && _instrIn(name) != null)
                   SegmentedButton<_Scope>(
                     key: const Key('preview-scope'),
@@ -671,13 +753,6 @@ class _GraphPanelState extends State<GraphPanel> {
               tooltip: 'Nouvelle page',
               icon: const Icon(Icons.add_box_outlined),
               onPressed: _addPage,
-            ),
-          if (widget.service != null)
-            TextButton.icon(
-              key: const Key('open-mingets'),
-              onPressed: () => setState(() => _mingetsOpen = true),
-              icon: const Icon(Icons.widgets_outlined, size: 18),
-              label: Text('Mingets (${widget.service!.macros.length})'),
             ),
           IconButton(
             tooltip: 'Tout voir',
@@ -792,49 +867,55 @@ class _GraphPanelState extends State<GraphPanel> {
             key: const Key('details'),
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(name, style: theme.textTheme.titleMedium),
-                  ),
-                  if (widget.onGoToPage != null)
-                    TextButton.icon(
-                      onPressed: () => widget.onGoToPage!(
-                        name,
-                        section: switch (_tab) {
-                          _PageTab.overview => null,
-                          _PageTab.rules => 'action',
-                          _PageTab.input => 'entree',
-                          _PageTab.access => 'acces',
-                          _PageTab.screen => 'ecran',
-                          _PageTab.preview => 'ecran',
-                        },
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(name, style: theme.textTheme.titleMedium),
+                    ),
+                    if (widget.onGoToPage != null)
+                      TextButton.icon(
+                        onPressed: () => widget.onGoToPage!(
+                          name,
+                          section: switch (_tab) {
+                            _PageTab.overview => null,
+                            _PageTab.rules => 'action',
+                            _PageTab.input => 'entree',
+                            _PageTab.access => 'acces',
+                            _PageTab.screen => 'ecran',
+                            _PageTab.preview => 'ecran',
+                          },
+                        ),
+                        icon: const Icon(Icons.code, size: 18),
+                        label: const Text('Aller au texte'),
                       ),
-                      icon: const Icon(Icons.code, size: 18),
-                      label: const Text('Aller au texte'),
-                    ),
-                  if (!pageMode && widget.service != null)
-                    IconButton(
-                      key: const Key('open-page'),
-                      tooltip: 'Ouvrir la page en grand (double clic)',
-                      icon: const Icon(Icons.open_in_full),
-                      onPressed: () => _openPage(name),
-                    ),
-                  if (widget.editing != null) ...[
-                    IconButton(
-                      key: const Key('rename-page'),
-                      tooltip: 'Renommer la page',
-                      icon: const Icon(Icons.drive_file_rename_outline),
-                      onPressed: () => _renamePage(name),
-                    ),
-                    IconButton(
-                      key: const Key('delete-page'),
-                      tooltip: 'Supprimer la page',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _removePage(name),
-                    ),
+                    if (!pageMode && widget.service != null)
+                      TextButton.icon(
+                        key: const Key('open-page'),
+                        onPressed: () => _openPage(name),
+                        icon: const Icon(Icons.open_in_full, size: 18),
+                        label: const Text('Ouvrir la page'),
+                      ),
+                    if (widget.editing != null) ...[
+                      IconButton(
+                        key: const Key('rename-page'),
+                        tooltip: 'Renommer la page',
+                        icon: const Icon(Icons.drive_file_rename_outline),
+                        onPressed: () => _renamePage(name),
+                      ),
+                      IconButton(
+                        key: const Key('delete-page'),
+                        tooltip: 'Supprimer la page',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _removePage(name),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
               Wrap(
                 spacing: 6,
@@ -871,7 +952,7 @@ class _GraphPanelState extends State<GraphPanel> {
                     segments: [
                       const ButtonSegment(
                         value: _PageTab.overview,
-                        label: Text('Aperçu'),
+                        label: Text('Résumé'),
                       ),
                       const ButtonSegment(
                         value: _PageTab.rules,

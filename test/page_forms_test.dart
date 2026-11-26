@@ -167,7 +167,7 @@ void main() {
   testWidgets('Aller au texte va à la partie de la page de l\'onglet', (
     tester,
   ) async {
-    await open(tester, 'Aperçu');
+    await open(tester, 'Résumé');
     expect(await goToText(tester), 3); // « a: »
     await tester.tap(find.text('Règles'));
     await tester.pumpAndSettle();

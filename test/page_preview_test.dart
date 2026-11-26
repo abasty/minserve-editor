@@ -5,7 +5,7 @@ import 'package:minserve_editor/src/graph/service_edit.dart';
 import 'package:minserve_editor/src/preview/page_preview.dart';
 import 'package:minterm_view/minterm_view.dart';
 
-import 'editor_page_test.dart' show pumpEditor, FakeFiles;
+import 'editor_page_test.dart' show pumpEditor, FakeFiles, viewTab;
 
 const _service = '''
 debut: accueil
@@ -105,7 +105,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<MinitelView>(view).colors, MinColors);
     // Retour au graphe.
-    await tester.tap(find.byKey(const Key('back-to-graph')));
+    await tester.tap(viewTab('Graphe'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('node-accueil')), findsOneWidget);
     expect(find.byKey(const Key('preview-screen')), findsNothing);

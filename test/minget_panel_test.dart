@@ -4,7 +4,7 @@ import 'package:minserve_core/minserve_core.dart';
 import 'package:minserve_editor/src/graph/minget_panel.dart';
 import 'package:minserve_editor/src/preview/page_preview.dart';
 
-import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText;
+import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText, viewTab;
 
 const _service = r'''
 debut: a
@@ -37,7 +37,7 @@ Future<void> open(WidgetTester tester) async {
   await pumpEditor(tester, FakeFiles());
   await tester.enterText(find.byKey(const Key('code')), _service);
   await tester.pump(const Duration(milliseconds: 400));
-  await tester.tap(find.byKey(const Key('open-mingets')));
+  await tester.tap(viewTab('Mingets'));
   await tester.pumpAndSettle();
 }
 
@@ -81,13 +81,12 @@ pages:
 
   testWidgets('la liste des mingets du service', (tester) async {
     await open(tester);
-    expect(find.text('Mingets (3)'), findsNothing); // on est dans le panneau
     expect(find.byKey(const Key('minget-trait')), findsOneWidget);
     expect(find.text('Un trait horizontal'), findsOneWidget);
     expect(find.byKey(const Key('minget-vieille')), findsOneWidget);
     expect(find.text('Choisissez un minget.'), findsOneWidget);
     // Retour au graphe.
-    await tester.tap(find.byKey(const Key('back-from-mingets')));
+    await tester.tap(viewTab('Graphe'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('node-a')), findsOneWidget);
   });
@@ -123,6 +122,7 @@ pages:
       contains('un entier est attendu'),
     );
     // Les valeurs par défaut reviennent.
+    await tester.ensureVisible(find.byKey(const Key('minget-reset')));
     await tester.tap(find.byKey(const Key('minget-reset')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('minget-error')), findsNothing);
@@ -214,7 +214,7 @@ pages:
       ),
     );
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.byKey(const Key('open-mingets')));
+    await tester.tap(viewTab('Mingets'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('minget-fixe')));
     await tester.pumpAndSettle();
@@ -259,7 +259,7 @@ pages:
       - macro: [double]
 ''');
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.byKey(const Key('open-mingets')));
+    await tester.tap(viewTab('Mingets'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('minget-trait')));
     await tester.pumpAndSettle();
@@ -282,7 +282,7 @@ pages:
     // Toucher une page l'ouvre en grand, sur l'onglet Écran.
     await tester.tap(find.byKey(const Key('used-by-page a')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('back-to-graph')), findsOneWidget);
+    expect(find.byKey(const Key('close-page')), findsOneWidget);
     expect(find.byKey(const Key('screen-a-0-macro-name')), findsOneWidget);
   });
 }

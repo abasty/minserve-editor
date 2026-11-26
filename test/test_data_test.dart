@@ -71,7 +71,9 @@ void main() {
     final view = tester.widget<PagePreview>(find.byType(PagePreview));
     expect(view.variables, {'pseudo': 'Zoe'});
     // Une variable ajoutée à la main, puis retirée.
+    await tester.ensureVisible(find.byKey(const Key('test-var-new')));
     await tester.enterText(find.byKey(const Key('test-var-new')), 'nb');
+    await tester.ensureVisible(find.byKey(const Key('test-var-add')));
     await tester.tap(find.byKey(const Key('test-var-add')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('test-var-nb')), findsOneWidget);

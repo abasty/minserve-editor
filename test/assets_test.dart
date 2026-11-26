@@ -70,6 +70,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(const Key('node-a')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('preview-missing')));
     final text = tester.widget<Text>(find.byKey(const Key('preview-missing')));
     expect(text.data, contains('/srv/assets'));
     expect(text.data, contains('dessous/autre.vdt'));

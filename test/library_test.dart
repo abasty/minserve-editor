@@ -5,7 +5,7 @@ import 'package:minserve_editor/src/graph/library.dart';
 import 'package:minserve_editor/src/graph/minget_panel.dart';
 import 'package:minserve_editor/src/graph/service_edit.dart';
 
-import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText;
+import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText, viewTab;
 
 const _noMacros = '''
 debut: a
@@ -151,9 +151,8 @@ void main() {
     await pumpEditor(tester, FakeFiles());
     await tester.enterText(find.byKey(const Key('code')), service);
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.byKey(const Key('open-mingets')));
+    await tester.tap(viewTab('Mingets'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('toggle-library')));
     // Le fichier de la bibliothèque se lit en vrai temps, pas en temps simulé.
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 200)),
@@ -165,10 +164,19 @@ void main() {
     tester,
   ) async {
     await openLibrary(tester, _noMacros);
+    // Les deux sections : le service (vide ici) et la bibliothèque.
+    expect(find.text('Du service (0)'), findsOneWidget);
+    expect(find.byKey(const Key('no-macros')), findsOneWidget);
+    expect(find.text('Bibliothèque (6)'), findsOneWidget);
     expect(find.byKey(const Key('lib-cadre-3d')), findsOneWidget);
     expect(find.byKey(const Key('lib-option')), findsOneWidget);
+    expect(find.byKey(const Key('lib-new')), findsAtLeastNWidgets(4));
     await tester.tap(find.byKey(const Key('lib-option')));
     await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('library-note'))).data,
+      contains('pas encore dans le service'),
+    );
     expect(find.byKey(const Key('preview-screen')), findsOneWidget);
     expect(find.byKey(const Key('minget-error')), findsNothing);
     expect(codeText(tester), isNot(contains('option')));
@@ -178,13 +186,16 @@ void main() {
     expect(codeText(tester), contains('  option:\n'));
     expect(find.byKey(const Key('minget-option')), findsOneWidget);
     expect(find.byKey(const Key('minget-details')), findsOneWidget);
-    // Dans la bibliothèque, il est maintenant marqué présent.
-    await tester.tap(find.byKey(const Key('toggle-library')));
-    await tester.pumpAndSettle();
+    // Dans la liste, il est maintenant marqué présent.
     expect(find.byKey(const Key('lib-in-service')), findsOneWidget);
+    expect(find.byKey(const Key('lib-new')), findsAtLeastNWidgets(3));
     await tester.tap(find.byKey(const Key('lib-option')));
     await tester.pumpAndSettle();
     expect(find.text('Déjà dans le service'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('library-note'))).data,
+      contains('déjà dans le service'),
+    );
   });
 
   testWidgets('un minget différent de même nom : un autre nom est demandé', (
