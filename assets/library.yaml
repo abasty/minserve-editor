@@ -1,0 +1,115 @@
+# La bibliothèque de mingets de l'éditeur : des macros toutes faites, que l'on
+# copie dans un service pour les utiliser. Même écriture que la section `macros:`
+# d'un service (forme étendue : paramètres nommés, typés, avec leur défaut).
+#
+# Règles : une définition par entrée, la clé seule sur sa ligne (`  nom:`), des
+# commentaires juste au-dessus pour la documenter (ils sont copiés avec la
+# définition), des définitions autonomes (sans appel d'une autre macro).
+# Ces définitions viennent de l'exemple de Minserve (example/service.yaml).
+macros:
+  # Un titre centré en double hauteur, ligne 4 : [colonne, texte].
+  titre-centre:
+    description: "Un titre en double hauteur sur la ligne 4"
+    parametres:
+      - {nom: col, type: entier, defaut: 14, min: 1, max: 40, description: "Colonne de départ"}
+      - {nom: texte, type: texte, defaut: "Titre"}
+    ecran:
+      - position: {ligne: 4, col: $1}
+      - doublehauteur                            # aussi : doublelargeur, doubletaille, taillenormale
+      - ecrit: "$2"
+
+  # Le fond d'un menu, le même cadre : [ligne du haut, lignes de texte, lignes rouges ensuite].
+  # Le cadre fait 4 lignes de plus que ses lignes de texte (haut, bande foncée, bas, ombre).
+  cadre-3d:
+    description: "Un cadre en relief pour un menu : haut, bande foncée, bas et ombre"
+    parametres:
+      - {nom: ligne, type: entier, defaut: 5, min: 1, max: 20, description: "Ligne du haut"}
+      - {nom: lignes, type: entier, defaut: 6, min: 0, max: 16, description: "Lignes de texte dans le cadre"}
+      - {nom: rouges, type: entier, defaut: 2, min: 0, max: 16, description: "Lignes rouges ensuite"}
+    ecran:
+      - position: {ligne: $1, col: 1}
+      - couleur: {texte: rouge, fond: cyan}
+      - graphique
+      - ecrit: "\x7f\x7f"
+      - repete: {caractere: "/", nombre: 36}
+      - ecrit: "\x7f\x7f\x7f\x7f"
+      - couleur: {texte: magenta, fond: vert}
+      - repete: {caractere: "|", nombre: 36}
+      - couleur: {texte: rouge, fond: noir}
+      - ecrit: "o\x7f\x7f\x7f"
+      - fois:
+          nombre: $2
+          ecran:
+            - couleur: {fond: magenta}
+            - repete: {caractere: " ", nombre: 36}
+            - couleur: {fond: noir}
+            - ecrit: "j\x7f\x7f\x7f"
+      - couleur: {fond: magenta}
+      - repete: {caractere: "p", nombre: 36}
+      - couleur: {fond: noir}
+      - ecrit: "j\x7f\x7f\x7f"
+      - couleur: {texte: bleu}
+      - ecrit: "#"
+      - couleur: {fond: noir}
+      - repete: {caractere: "#", nombre: 35}
+      - couleur: {texte: rouge}
+      - ecrit: "j\x7f"
+      - fois:
+          nombre: $3
+          ecran:
+            - repete: {caractere: "\x7f", nombre: 40}
+
+  # Une ligne de menu : [ligne, colonne, lettre, libellé]. La lettre du choix est en double
+  # largeur, le libellé est ce qui la suit. La barre fait 33 colonnes en tout (4 avant le libellé),
+  # complétées par des espaces : 29 moins la longueur du libellé, calculés par l'expression
+  # $( ... ). Une expression qui contient une virgule s'écrit entre guillemets en notation en ligne.
+  option:
+    description: "Une ligne de menu : la lettre du choix en double largeur, puis le libellé"
+    parametres:
+      - {nom: ligne, type: entier, defaut: 8, min: 1, max: 24}
+      - {nom: col, type: entier, defaut: 4, min: 1, max: 8}
+      - {nom: lettre, type: texte, defaut: "A", description: "La lettre du choix"}
+      - {nom: libelle, type: texte, defaut: "Un choix", description: "Le libellé (29 caractères au plus)"}
+    ecran:
+      - position: {ligne: $1, col: $2}
+      - souligne: actif
+      - inversion: actif
+      - couleur: {texte: magenta}
+      - ecrit: " "
+      - couleur: {texte: cyan}
+      - doublelargeur
+      - ecrit: "$3"
+      - taillenormale
+      - couleur: {texte: blanc}
+      - ecrit: "{$4"
+      - repete: {caractere: " ", nombre: "$(max(0, 29 - longueur($4)))"}
+
+  # Le titre d'une page : [ligne, texte].
+  titre-simple:
+    description: "Le titre d'une page : bandeau rouge, texte en double hauteur"
+    parametres:
+      - {nom: ligne, type: entier, defaut: 1, min: 1, max: 23}
+      - {nom: texte, type: texte, defaut: "Titre de la page"}
+    ecran:
+      - position: {ligne: $1, col: 1}
+      - couleur: {fond: rouge}
+      - ecrit: " "
+      - effacefindeligne
+      - doublehauteur
+      - ecrit: "$2"
+
+  # La ligne magenta (ligne 23) au-dessus de la zone de saisie.
+  regle:
+    description: "Une ligne magenta sur la ligne 23, au-dessus de la zone de saisie"
+    ecran:
+      - position: {ligne: 23, col: 1}
+      - couleur: {texte: magenta}
+      - repete: {caractere: "_", nombre: 40}
+
+  # Le bandeau bleu de la zone de saisie : « Votre choix : ».
+  choix:
+    description: "Le bandeau bleu « Votre choix : » de la zone de saisie"
+    ecran:
+      - couleur: {texte: blanc, fond: bleu}
+      - ecrit: " Votre choix :"
+      - effacefindeligne

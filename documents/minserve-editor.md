@@ -434,16 +434,22 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
      liste les pages et les macros qui l'appellent (avec leur nombre) ; toucher une page l'ouvre sur l'onglet
      Écran, une macro la choisit. Comme le serveur développe les macros au chargement, modifier une définition
      met déjà tous ses appels à jour : aucune réécriture n'est nécessaire.
-   - **8e — La bibliothèque de mingets (à faire, plan validé)** :
-     - **8e-1, bibliothèque livrée avec l'éditeur** : un fichier `assets/library.yaml`, section `macros:` écrite
-       comme dans un service (forme étendue), donc copier-coller possible dans les deux sens. Contenu de départ
-       (définitions fournies par l'auteur) : cadre 3D, titre sur bandeau, ligne de menu, ligne de saisie.
-       Dans le panneau Mingets, un bouton « Bibliothèque » ouvre la liste des modèles, avec la même mise en
-       page que les mingets du service (aperçu avec arguments d'essai via `mingetPreviewText` appliqué à la
-       définition de la bibliothèque, description). « Utiliser » copie la définition dans `macros:` (même
-       emplacement que l'extraction) puis propose d'insérer l'appel dans la page ouverte (boîte d'arguments
-       de 8c). Si le nom existe déjà : définition identique → réutilisée sans copie ; différente → renommage
-       proposé. Chaque modèle est autonome (pas de dépendance à copier dans cette première version).
+   - **8e — La bibliothèque de mingets (plan validé ; 8e-1 faite)** :
+     - **8e-1, bibliothèque livrée avec l'éditeur (faite)** : `assets/library.yaml` (déclaré dans le
+       `pubspec.yaml`), section `macros:` écrite comme dans un service, en forme étendue : copier-coller
+       possible dans les deux sens. Contenu de départ : les six macros de `minserve/example/service.yaml`
+       (`titre-centre`, `cadre-3d`, `option`, `titre-simple`, `regle`, `choix`), récrites avec des
+       paramètres nommés, typés, avec défaut ; **à relire et corriger par l'auteur** (les défauts et les
+       descriptions sont de moi). Règles du fichier : la clé de chaque macro seule sur sa ligne, des
+       commentaires juste au-dessus (copiés avec la définition), des définitions autonomes. Dans le
+       panneau Mingets, l'icône bibliothèque ouvre la liste des modèles (`library.dart` : `LibraryMinget`,
+       `loadLibrary`), avec la même mise en page que les mingets du service : aperçu avec arguments d'essai
+       (`withLibraryMacro` met le modèle dans une copie du service, qui ne sert qu'à l'aperçu), marque « dans
+       le service » ou « différent ». « Ajouter au service » (`addLibraryMacro`) copie la définition, commentaires
+       compris, à la suite des macros (ou dans une section `macros:` avant `pages:`) ; si le service a déjà un
+       minget de même nom mais différent, un autre nom est demandé ; s'il est identique, rien n'est copié.
+     - **8e-1b, à faire** : proposer les mingets de la bibliothèque dans le sélecteur d'instruction de l'onglet
+       Écran (les ajouter au service au moment de les insérer, en une seule modification).
      - **8e-2, bibliothèque personnelle** : « Ajouter à ma bibliothèque » sur un minget du service ; stockage
        dans le navigateur (même format), plus « Exporter » / « Importer » un fichier `.yaml` de bibliothèque
        pour la partager ou la sauvegarder. Les modèles personnels s'affichent dans la même liste, avec une

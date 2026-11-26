@@ -4,6 +4,7 @@ import 'package:minserve_core/minserve_core.dart';
 import '../preview/page_preview.dart';
 import 'graph_dialogs.dart';
 import 'graph_panel.dart' show GraphEditing;
+import 'library.dart';
 import 'service_edit.dart';
 
 const _numericKeys = {'ligne', 'col', 'largeur', 'hauteur', 'nombre', 'depuis'};
@@ -91,7 +92,12 @@ class MingetPanel extends StatefulWidget {
     this.color = false,
     this.onColorChanged,
     this.variables = const {},
+    this.library,
   });
+
+  /// La bibliothèque de mingets ; `null` : celle livrée avec l'éditeur, lue à
+  /// l'ouverture.
+  final List<LibraryMinget>? library;
 
   final Service service;
 
@@ -118,19 +124,92 @@ class MingetPanel extends StatefulWidget {
 class _MingetPanelState extends State<MingetPanel> {
   String? _selected;
 
+  /// Vrai quand on regarde la bibliothèque plutôt que les mingets du service.
+  bool _library = false;
+  String? _librarySelected;
+  List<LibraryMinget>? _lib;
+  String? _libraryError;
+
+  @override
+  void initState() {
+    super.initState();
+    _lib = widget.library;
+    if (_lib == null) {
+      loadLibrary().then(
+        (lib) {
+          if (mounted) setState(() => _lib = lib);
+        },
+        onError: (Object e) {
+          if (mounted) {
+            setState(
+              () => _libraryError = e is ServiceException ? e.message : '$e',
+            );
+          }
+        },
+      );
+    }
+  }
+
   /// Les arguments d'essai de chaque minget, gardés tant que le panneau est là.
   final _args = <String, List<Object?>>{};
   int _resets = 0;
 
   MacroDefinition? get _macro => widget.service.macros[_selected];
 
+  /// Sous quel nom garder les arguments d'essai : un minget du service et un de
+  /// la bibliothèque de même nom ne se mélangent pas.
+  String _akey(MacroDefinition m) => _library ? 'bib:${m.name}' : m.name;
+
   List<Object?> _argsOf(MacroDefinition m) {
-    final saved = _args[m.name];
+    final saved = _args[_akey(m)];
     // La macro a changé de nombre de paramètres : on repart des défauts.
     if (saved == null || saved.length != m.arity) {
-      return _args[m.name] = defaultMingetArgs(m);
+      return _args[_akey(m)] = defaultMingetArgs(m);
     }
     return saved;
+  }
+
+  LibraryMinget? get _libraryChosen {
+    for (final m in _lib ?? const <LibraryMinget>[]) {
+      if (m.name == _librarySelected) return m;
+    }
+    return null;
+  }
+
+  /// Copie [lib] dans le service ; sous un autre nom s'il y en a déjà un
+  /// différent.
+  Future<void> _addLibrary(LibraryMinget lib) async {
+    final editing = widget.editing!;
+    final state = libraryState(editing.text(), lib.name, lib.block);
+    if (state == LibraryState.same) {
+      setState(() {
+        _library = false;
+        _selected = lib.name;
+      });
+      _say('« ${lib.name} » est déjà dans le service.');
+      return;
+    }
+    String? as;
+    if (state == LibraryState.different) {
+      as = await askPageName(
+        context,
+        title: 'Un minget « ${lib.name} » existe déjà',
+        action: 'Ajouter',
+        existing: widget.service.macros.keys,
+        initial: '${lib.name}-2',
+        label: 'Nom dans le service',
+        allowInitial: true,
+        check: macroNameError,
+      );
+      if (as == null || !mounted) return;
+    }
+    if (editing.apply((t) => addLibraryMacro(t, lib.name, lib.block, as: as))) {
+      setState(() {
+        _library = false;
+        _selected = as ?? lib.name;
+      });
+      _say('Minget « ${as ?? lib.name} » ajouté au service.');
+    }
   }
 
   Future<void> _rename(MacroDefinition m) async {
@@ -243,7 +322,21 @@ class _MingetPanelState extends State<MingetPanel> {
                 icon: const Icon(Icons.arrow_back, size: 18),
                 label: const Text('Graphe'),
               ),
-              Text('Mingets', style: theme.textTheme.titleSmall),
+              Text(
+                _library ? 'Bibliothèque' : 'Mingets',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                key: const Key('toggle-library'),
+                tooltip: _library
+                    ? 'Revenir aux mingets du service'
+                    : 'Bibliothèque de mingets',
+                isSelected: _library,
+                icon: const Icon(Icons.library_books_outlined),
+                selectedIcon: const Icon(Icons.library_books),
+                onPressed: () => setState(() => _library = !_library),
+              ),
               const Spacer(),
               if (widget.onColorChanged != null)
                 IconButton(
@@ -260,23 +353,86 @@ class _MingetPanelState extends State<MingetPanel> {
           ),
         ),
         Expanded(
-          child: Row(
+          child: _library
+              ? _libraryView(theme)
+              : Row(
+                  children: [
+                    SizedBox(width: 190, child: _list(macros, theme)),
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      child: selected == null
+                          ? Center(
+                              child: Text(
+                                macros.isEmpty
+                                    ? 'Ce service n\'a pas de macro.'
+                                    : 'Choisissez un minget.',
+                              ),
+                            )
+                          : _detail(selected, theme),
+                    ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _libraryView(ThemeData theme) {
+    final lib = _lib;
+    if (_libraryError != null) {
+      return Center(
+        child: Text(
+          'Bibliothèque illisible : $_libraryError',
+          key: const Key('library-error'),
+          style: TextStyle(color: theme.colorScheme.error),
+        ),
+      );
+    }
+    if (lib == null) return const Center(child: Text('Chargement…'));
+    final chosen = _libraryChosen;
+    final text = widget.text;
+    return Row(
+      children: [
+        SizedBox(
+          width: 190,
+          child: ListView(
             children: [
-              SizedBox(width: 190, child: _list(macros, theme)),
-              const VerticalDivider(width: 1),
-              Expanded(
-                child: selected == null
-                    ? Center(
-                        child: Text(
-                          macros.isEmpty
-                              ? 'Ce service n\'a pas de macro.'
-                              : 'Choisissez un minget.',
-                        ),
-                      )
-                    : _detail(selected, theme),
-              ),
+              for (final m in lib)
+                ListTile(
+                  key: Key('lib-${m.name}'),
+                  dense: true,
+                  selected: m.name == _librarySelected,
+                  title: Text(m.name),
+                  subtitle: Text(
+                    m.definition.description ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: text == null
+                      ? null
+                      : switch (libraryState(text, m.name, m.block)) {
+                          LibraryState.absent => null,
+                          LibraryState.same => const Icon(
+                            Icons.check,
+                            size: 18,
+                            key: Key('lib-in-service'),
+                          ),
+                          LibraryState.different => const Icon(
+                            Icons.compare_arrows,
+                            size: 18,
+                            key: Key('lib-differs'),
+                          ),
+                        },
+                  onTap: () => setState(() => _librarySelected = m.name),
+                ),
             ],
           ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: chosen == null
+              ? const Center(child: Text('Choisissez un minget.'))
+              : _detail(chosen.definition, theme, lib: chosen),
         ),
       ],
     );
@@ -313,11 +469,15 @@ class _MingetPanelState extends State<MingetPanel> {
     );
   }
 
-  Widget _detail(MacroDefinition m, ThemeData theme) {
+  Widget _detail(MacroDefinition m, ThemeData theme, {LibraryMinget? lib}) {
     final args = _argsOf(m);
+    final text = widget.text;
+    final state = lib == null || text == null
+        ? null
+        : libraryState(text, lib.name, lib.block);
     return Column(
       children: [
-        Expanded(child: _preview(m, args, theme)),
+        Expanded(child: _preview(m, args, theme, lib: lib)),
         const Divider(height: 1),
         Material(
           color: theme.colorScheme.surfaceContainer,
@@ -339,13 +499,24 @@ class _MingetPanelState extends State<MingetPanel> {
                         TextButton.icon(
                           key: const Key('minget-reset'),
                           onPressed: () => setState(() {
-                            _args.remove(m.name);
+                            _args.remove(_akey(m));
                             _resets++;
                           }),
                           icon: const Icon(Icons.restart_alt, size: 18),
                           label: const Text('Valeurs par défaut'),
                         ),
-                      if (widget.editing != null) ...[
+                      if (lib != null && widget.editing != null && text != null)
+                        FilledButton.icon(
+                          key: const Key('library-add'),
+                          onPressed: () => _addLibrary(lib),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: Text(
+                            state == LibraryState.same
+                                ? 'Déjà dans le service'
+                                : 'Ajouter au service',
+                          ),
+                        ),
+                      if (lib == null && widget.editing != null) ...[
                         IconButton(
                           key: const Key('minget-rename'),
                           tooltip: 'Renommer le minget',
@@ -365,7 +536,7 @@ class _MingetPanelState extends State<MingetPanel> {
                           onPressed: () => _remove(m),
                         ),
                       ],
-                      if (widget.onGoToMacro != null)
+                      if (lib == null && widget.onGoToMacro != null)
                         TextButton.icon(
                           key: const Key('minget-goto'),
                           onPressed: () => widget.onGoToMacro!(m.name),
@@ -375,7 +546,14 @@ class _MingetPanelState extends State<MingetPanel> {
                     ],
                   ),
                   if (m.description != null) Text(m.description!),
-                  _usedBy(m, theme),
+                  if (state == LibraryState.different)
+                    Text(
+                      'Le service a déjà un minget « ${m.name} » différent : '
+                      'il sera ajouté sous un autre nom.',
+                      key: const Key('library-differs'),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  if (lib == null) _usedBy(m, theme),
                   if (!m.extended)
                     Text(
                       'Macro écrite en liste d\'instructions : ses paramètres '
@@ -496,8 +674,21 @@ class _MingetPanelState extends State<MingetPanel> {
     );
   }
 
-  Widget _preview(MacroDefinition m, List<Object?> args, ThemeData theme) {
-    final text = widget.text;
+  Widget _preview(
+    MacroDefinition m,
+    List<Object?> args,
+    ThemeData theme, {
+    LibraryMinget? lib,
+  }) {
+    var text = widget.text;
+    // Un minget de la bibliothèque s'essaie dans le service, sans y être écrit.
+    if (text != null && lib != null) {
+      try {
+        text = withLibraryMacro(text, lib.name, lib.block);
+      } on Object {
+        text = null;
+      }
+    }
     if (text == null) {
       return const Center(
         child: Text(
@@ -535,7 +726,9 @@ class _MingetPanelState extends State<MingetPanel> {
       color: widget.color,
       variables: widget.variables,
       inputZone: false,
-      caption: 'Minget « ${m.name} »',
+      caption: lib == null
+          ? 'Minget « ${m.name} »'
+          : 'Bibliothèque : « ${m.name} »',
     );
   }
 }

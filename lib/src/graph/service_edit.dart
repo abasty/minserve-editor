@@ -1376,23 +1376,7 @@ String extractMinget(
   var result = lines.join('\n');
 
   // La macro va à la suite des autres, ou avant `pages:` s'il n'y en a pas.
-  final root = _rootOf(result);
-  final macros = root['macros'];
-  final out = result.split('\n');
-  if (macros is YamlMap && macros.nodes.isNotEmpty) {
-    final last = macros.nodes.values.last;
-    out.insertAll(_lastLine(last, out, last.span.start.line) + 1, def);
-  } else if (macros == null && !root.containsKey('macros')) {
-    final key = root.nodes.keys.cast<YamlNode>().firstWhere(
-      (k) => k.value == 'pages',
-    );
-    out.insertAll(key.span.start.line, ['macros:', ...def]);
-  } else {
-    throw EditException(
-      'Les macros sont écrites en ligne : ajoutez celle-ci dans le texte.',
-    );
-  }
-  result = _checked(out.join('\n'));
+  result = _checked(_placeMacro(result, def));
 
   // L'extraction ne doit rien changer à ce que la page affiche.
   final before = _pageBytes(text, page);
@@ -1408,4 +1392,139 @@ String extractMinget(
     );
   }
   return result;
+}
+
+// --- La bibliothèque de mingets ---
+
+/// Les définitions des macros de la bibliothèque [library] (un texte avec une
+/// section `macros:`), chacune avec les lignes qui la décrivent : les
+/// commentaires juste au-dessus, puis la définition elle-même.
+Map<String, List<String>> libraryBlocks(String library) {
+  final macros = loadYamlNode(library);
+  if (macros is! YamlMap || macros.nodes['macros'] is! YamlMap) {
+    throw EditException('La bibliothèque n\'a pas de section macros.');
+  }
+  final map = macros.nodes['macros'] as YamlMap;
+  final lines = library.split('\n');
+  final blocks = <String, List<String>>{};
+  for (final entry in map.nodes.entries) {
+    final key = entry.key as YamlScalar;
+    var start = key.span.start.line;
+    final end = _lastLine(entry.value, lines, start);
+    while (start > 0 && lines[start - 1].trimLeft().startsWith('#')) {
+      start--;
+    }
+    final block = lines.sublist(start, end + 1);
+    while (block.last.trim().isEmpty) {
+      block.removeLast();
+    }
+    blocks['${key.value}'] = block;
+  }
+  return blocks;
+}
+
+/// Le texte d'une macro de bibliothèque sans ses commentaires, en objet YAML
+/// (pour la comparer à celle d'un service).
+Object? _blockMacro(List<String> block, String name) {
+  final root = loadYaml(block.join('\n'));
+  return root is Map ? _plain(root[name]) : null;
+}
+
+/// Où en est la macro [name] décrite par [block] dans le service [text] :
+/// absente, présente à l'identique, ou présente mais différente.
+enum LibraryState { absent, same, different }
+
+LibraryState libraryState(String text, String name, List<String> block) {
+  final macros = _rootOf(text)['macros'];
+  if (macros is! YamlMap || !macros.containsKey(name)) {
+    return LibraryState.absent;
+  }
+  return jsonEncode(_plain(macros[name])) ==
+          jsonEncode(_blockMacro(block, name))
+      ? LibraryState.same
+      : LibraryState.different;
+}
+
+/// Le texte du service où la macro [name] est celle de [block] (la sienne est
+/// remplacée si elle existe). Il ne sert qu'à l'aperçu (voir [mingetPreviewText]).
+String withLibraryMacro(String text, String name, List<String> block) {
+  final root = _plain(loadYaml(text));
+  if (root is! Map) throw EditException('Le texte n\'est pas un service.');
+  final macros = root['macros'] is Map ? root['macros'] as Map : {};
+  macros[name] = _blockMacro(block, name);
+  root['macros'] = macros;
+  return jsonEncode(root);
+}
+
+/// Écrit [def] (les lignes d'une macro, avec leur indentation) à la suite des
+/// macros de [text], ou dans une section `macros:` avant `pages:` s'il n'y en a
+/// pas. [spaced] : une ligne vide sépare la nouvelle macro de ce qui précède.
+String _placeMacro(String text, List<String> def, {bool spaced = false}) {
+  final root = _rootOf(text);
+  final macros = root['macros'];
+  final out = text.split('\n');
+  if (macros is YamlMap && macros.nodes.isNotEmpty) {
+    final last = macros.nodes.values.last;
+    out.insertAll(_lastLine(last, out, last.span.start.line) + 1, [
+      if (spaced) '',
+      ...def,
+    ]);
+  } else if (macros == null && !root.containsKey('macros')) {
+    final key = root.nodes.keys.cast<YamlNode>().firstWhere(
+      (k) => k.value == 'pages',
+    );
+    out.insertAll(key.span.start.line, ['macros:', ...def, if (spaced) '']);
+  } else {
+    throw EditException(
+      'Les macros sont écrites en ligne : ajoutez celle-ci dans le texte.',
+    );
+  }
+  return out.join('\n');
+}
+
+/// Copie dans le service [text] la macro [name] décrite par [block] (une
+/// définition de la bibliothèque), sous le nom [as] s'il est donné. Les
+/// commentaires de la définition viennent avec elle.
+String addLibraryMacro(
+  String text,
+  String name,
+  List<String> block, {
+  String? as,
+}) {
+  _requireValid(text);
+  final target = as ?? name;
+  final macros = _rootOf(text)['macros'];
+  final existing = macros is YamlMap
+      ? macros.keys.cast<Object?>().map((k) => '$k').toList()
+      : const <String>[];
+  final error = macroNameError(target, existing);
+  if (error != null) throw EditException('Nom « $target » : $error');
+
+  // Les lignes à l'indentation des macros du service (celles de la
+  // bibliothèque sont à 2 espaces).
+  final indent = macros is YamlMap && macros.nodes.isNotEmpty
+      ? (macros.nodes.keys.first as YamlNode).span.start.column
+      : 2;
+  final shift = indent - 2;
+  final def = <String>[];
+  var renamed = false;
+  for (final line in block) {
+    var l = line;
+    if (!renamed &&
+        !line.trimLeft().startsWith('#') &&
+        line.trim().isNotEmpty) {
+      // La ligne de la clé : le nouveau nom prend la place de l'ancien.
+      l = '  ${_pageScalar(target)}:';
+      renamed = true;
+    }
+    if (l.isEmpty) {
+      def.add(l);
+    } else if (shift >= 0) {
+      def.add('${' ' * shift}$l');
+    } else {
+      final lead = l.length - l.trimLeft().length;
+      def.add(l.substring(lead < -shift ? lead : -shift));
+    }
+  }
+  return _checked(_placeMacro(text, def, spaced: true));
 }
