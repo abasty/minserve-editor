@@ -437,12 +437,12 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
    - **8e — La bibliothèque de mingets (plan validé ; 8e-1 faite)** :
      - **8e-1, bibliothèque livrée avec l'éditeur (faite)** : `assets/library.yaml` (déclaré dans le
        `pubspec.yaml`), section `macros:` écrite comme dans un service, en forme étendue : copier-coller
-       possible dans les deux sens. Contenu actuel : quatre macros de `minserve/example/service.yaml`
-       (`titre-centre`, `titre-simple`, `regle`, `choix`), récrites avec des paramètres nommés, typés, avec
-       défaut ; **à relire et corriger par l'auteur** (les défauts et les descriptions sont de moi).
-       `cadre-3d`, `option` et `fond` (un cadre en relief, une ligne de menu, un fond en double hauteur,
-       tous paramétrables en position et en taille) ont été essayés puis **retirés** : trop compliqués
-       pour l'instant, l'auteur y reviendra. Règles du fichier : la clé de chaque macro seule sur sa ligne, des
+       possible dans les deux sens. Contenu actuel : `titre-centre`, `titre-simple`, `regle`, `choix` (tirées de
+       `minserve/example/service.yaml`, récrites en forme étendue ; défauts et descriptions à relire) et
+       `fond` et `cadre-3d`, **finalisés par l'auteur** dans `minserve/example/exemple-lib.yaml` et copiés tels
+       quels (paramètres `L`, `C`, `ligs`, `cols`, `couleur`, `bord` pour `fond` ; sans `bord` pour `cadre-3d` ;
+       seuls les commentaires d'en-tête ont été mis à jour). `option` (une ligne de menu) en a été retiré :
+       l'auteur y reviendra. Règles du fichier : la clé de chaque macro seule sur sa ligne, des
        commentaires juste au-dessus (copiés avec la définition), des définitions autonomes. Dans le
        panneau Mingets, l'icône bibliothèque ouvre la liste des modèles (`library.dart` : `LibraryMinget`,
        `loadLibrary`), avec la même mise en page que les mingets du service : aperçu avec arguments d'essai

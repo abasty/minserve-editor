@@ -5,6 +5,7 @@ import 'package:minserve_editor/src/graph/library.dart';
 import 'package:minserve_editor/src/graph/minget_panel.dart';
 import 'package:minserve_editor/src/graph/service_edit.dart';
 import 'package:minserve_editor/src/preview/page_preview.dart';
+import 'package:minterm_view/minterm_view.dart';
 
 import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText, viewTab;
 
@@ -99,6 +100,120 @@ void main() {
       expect(row(long, 1, 40), long);
     },
   );
+
+  group('fond et cadre-3d', () {
+    LibraryMinget named(String name) =>
+        library.firstWhere((m) => m.name == name);
+
+    TMinitel draw(String name, List<Object?> args) {
+      final m = named(name);
+      final service = Service.parseString(
+        mingetPreviewText(
+          withLibraryMacro(_noMacros, m.name, m.block),
+          m.name,
+          args,
+        ),
+      );
+      final data = renderPreview(service, service.pages[mingetPage]!);
+      expect(data.error, isNull);
+      return data.minitel;
+    }
+
+    int code(TMinitel t, int r, int c) => t.screen[r][c].code & 0x7F;
+
+    String row(TMinitel t, int r, int from, int length) => String.fromCharCodes(
+      [for (var c = from; c < from + length; c++) code(t, r, c)],
+    );
+
+    test('fond par défaut : bande sur tout l\'écran, avec son bord', () {
+      final t = draw('fond', [1, 1, 11, 36, 'rouge', 1]);
+      expect(row(t, 1, 2, 37), '_' * 37);
+      expect(row(t, 2, 1, 2), '}{');
+      expect(row(t, 23, 1, 2), '}{');
+      expect(row(t, 23, 39, 1), '{');
+      expect(row(t, 24, 2, 37), '~' * 37);
+    });
+
+    test('fond : origine, taille et couleur', () {
+      final base = draw('fond', [1, 1, 2, 8, 'rouge', 1]);
+      final moved = draw('fond', [6, 20, 2, 8, 'rouge', 1]);
+      // Le coin (1, 1) devient (6, 20) : tout glisse de 5 lignes et 19 colonnes.
+      for (var r = 1; r <= 6; r++) {
+        for (var c = 1; c <= 12; c++) {
+          expect(
+            [
+              moved.screen[r + 5][c + 19].code,
+              moved.screen[r + 5][c + 19].gAttr,
+              moved.screen[r + 5][c + 19].lAttr,
+            ],
+            [
+              base.screen[r][c].code,
+              base.screen[r][c].gAttr,
+              base.screen[r][c].lAttr,
+            ],
+            reason: 'case $r,$c',
+          );
+        }
+      }
+      final bleu = draw('fond', [1, 1, 2, 8, 'bleu', 1]);
+      expect(bleu.screen[3][5].lAttr, isNot(base.screen[3][5].lAttr));
+      expect(row(bleu, 3, 1, 2), row(base, 3, 1, 2));
+    });
+
+    test('fond sans bord : ni côtés ni traits', () {
+      final t = draw('fond', [1, 1, 3, 10, 'rouge', 0]);
+      for (var r = 1; r <= 24; r++) {
+        for (var c = 1; c <= 40; c++) {
+          expect(code(t, r, c), 0x20, reason: 'case $r,$c');
+        }
+      }
+    });
+
+    test('cadre-3d : position, taille, et pas de fond autour', () {
+      // Coin (5, 3), 2 lignes de texte, 10 colonnes : lignes 5 à 5 + 3 + 2 = 10.
+      final t = draw('cadre-3d', [5, 3, 2, 10, 'rouge']);
+      expect(row(t, 5, 3, 10), '/' * 10);
+      // Le bout de la barre du haut est un bloc plein, sur fond noir.
+      expect(code(t, 5, 13), 0x7F);
+      expect(row(t, 6, 3, 10), '|' * 10);
+      expect(code(t, 6, 13), 0x6F);
+      for (final r in [7, 8, 9]) {
+        expect(code(t, r, 13), 0x6A, reason: 'ligne $r');
+      }
+      expect(row(t, 9, 3, 10), 'p' * 10);
+      expect(row(t, 10, 3, 10), '#' * 10);
+      expect(code(t, 10, 13), 0x6A);
+      // Rien ailleurs : ni bloc plein, ni caractère hors du cadre.
+      for (var r = 1; r <= 24; r++) {
+        for (var c = 1; c <= 40; c++) {
+          final dedans = r >= 5 && r <= 10 && c >= 3 && c <= 13;
+          if (!(r == 5 && c == 13)) {
+            expect(code(t, r, c), isNot(0x7F), reason: 'bloc plein $r,$c');
+          }
+          if (!dedans) expect(code(t, r, c), 0x20, reason: 'case $r,$c');
+        }
+      }
+    });
+
+    test('cadre-3d : la colonne et la ligne déplacent tout', () {
+      List<int> cell(TMinitel t, int r, int c) => [
+        t.screen[r][c].code,
+        t.screen[r][c].gAttr,
+        t.screen[r][c].lAttr,
+      ];
+      final base = draw('cadre-3d', [4, 3, 2, 10, 'cyan']);
+      final moved = draw('cadre-3d', [9, 20, 2, 10, 'cyan']);
+      for (var r = 4; r <= 9; r++) {
+        for (var c = 3; c <= 13; c++) {
+          expect(
+            cell(moved, r + 5, c + 17),
+            cell(base, r, c),
+            reason: 'case $r,$c',
+          );
+        }
+      }
+    });
+  });
 
   test(
     'les blocs : les commentaires du dessus viennent avec la définition',
