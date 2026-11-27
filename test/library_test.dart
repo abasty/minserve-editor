@@ -125,6 +125,34 @@ void main() {
       [for (var c = from; c < from + length; c++) code(t, r, c)],
     );
 
+    test(
+      'option : une barre de « cols » colonnes, avec son choix et son texte',
+      () {
+        for (final (l, c, cols, car, texte) in [
+          (8, 4, 33, 'A', 'Un choix'),
+          (3, 2, 20, 'B', 'Court'),
+          (12, 30, 10, 'C', 'Ok'),
+        ]) {
+          final t = draw('option', [l, c, cols, car, texte]);
+          final blank = t.screen[20][20];
+          // Le caractère du choix (en double largeur : 2 colonnes), « { », puis le texte.
+          expect(row(t, l, c + 1, 2), car * 2, reason: texte);
+          expect(code(t, l, c + 3), 0x7B, reason: texte);
+          expect(row(t, l, c + 4, texte.length), texte);
+          // La barre couvre les colonnes c à c + cols - 1, et pas une de plus.
+          for (var x = c; x < c + cols; x++) {
+            expect(
+              t.screen[l][x].lAttr,
+              isNot(blank.lAttr),
+              reason: '$texte : colonne $x',
+            );
+          }
+          expect(t.screen[l][c - 1 < 1 ? 1 : c - 1].lAttr, blank.lAttr);
+          expect(t.screen[l][c + cols].lAttr, blank.lAttr, reason: texte);
+        }
+      },
+    );
+
     test('fond par défaut : bande sur tout l\'écran, avec son bord', () {
       final t = draw('fond', [1, 1, 11, 36, 'rouge', 1]);
       expect(row(t, 1, 2, 37), '_' * 37);

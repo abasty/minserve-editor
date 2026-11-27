@@ -166,3 +166,31 @@ macros:
       - repete: {caractere: "#", nombre: $($4 - 1)}
       - couleur: {texte: $5}
       - ecrit: "j"
+
+  # Une ligne de menu : [L, C, cols, car, texte]. (L, C) est son début. La barre fait « cols » colonnes
+  # en tout : un espace, le caractère du choix « car » en double largeur (2 colonnes), « { », puis le
+  # « texte », complété par des espaces. Les espaces se calculent par l'expression $( ... ) :
+  # « cols » moins ce qui précède et moins la longueur du texte. Une expression qui contient une virgule
+  # s'écrit entre guillemets en notation en ligne. « car » est un seul caractère ; « texte » doit tenir
+  # dans « cols » - 4 caractères.
+  option:
+    description: "Une ligne de menu : le caractère du choix en double largeur, puis le texte, sur une barre de largeur fixe"
+    parametres:
+      - {nom: L, type: entier, defaut: 8, min: 1, max: 24, description: "Ligne"}
+      - {nom: C, type: entier, defaut: 4, min: 1, max: 37, description: "Colonne de début de la barre"}
+      - {nom: cols, type: entier, defaut: 33, min: 5, max: 40, description: "Largeur de la barre, en colonnes"}
+      - {nom: car, type: texte, defaut: "A", description: "Le caractère du choix (un seul)"}
+      - {nom: texte, type: texte, defaut: "Un choix", description: "Le texte du choix"}
+    ecran:
+      - position: {ligne: $1, col: $2}
+      - souligne: actif
+      - inversion: actif
+      - couleur: {texte: magenta}
+      - ecrit: " "
+      - couleur: {texte: cyan}
+      - doublelargeur
+      - ecrit: "$4"
+      - taillenormale
+      - couleur: {texte: blanc}
+      - ecrit: "{$5"
+      - repete: {caractere: " ", nombre: "$(max(0, $3 - 4 - longueur($5)))"}

@@ -441,8 +441,8 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
        `minserve/example/service.yaml`, récrites en forme étendue ; défauts et descriptions à relire) et
        `fond` et `cadre-3d`, **finalisés par l'auteur** dans `minserve/example/exemple-lib.yaml` et copiés tels
        quels (paramètres `L`, `C`, `ligs`, `cols`, `couleur`, `bord` pour `fond` ; sans `bord` pour `cadre-3d` ;
-       seuls les commentaires d'en-tête ont été mis à jour). `option` (une ligne de menu) en a été retiré :
-       l'auteur y reviendra. Règles du fichier : la clé de chaque macro seule sur sa ligne, des
+       seuls les commentaires d'en-tête ont été mis à jour) ; `option` (une ligne de menu), remise ensuite avec
+       les paramètres `L`, `C`, `cols` (largeur de la barre), `car` (le caractère du choix) et `texte`. Règles du fichier : la clé de chaque macro seule sur sa ligne, des
        commentaires juste au-dessus (copiés avec la définition), des définitions autonomes. Dans le
        panneau Mingets, l'icône bibliothèque ouvre la liste des modèles (`library.dart` : `LibraryMinget`,
        `loadLibrary`), avec la même mise en page que les mingets du service : aperçu avec arguments d'essai
