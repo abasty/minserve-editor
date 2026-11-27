@@ -695,7 +695,12 @@ class _MingetPanelState extends State<MingetPanel> {
     // Un minget de la bibliothèque s'essaie dans le service, sans y être écrit.
     if (text != null && lib != null) {
       try {
-        text = withLibraryMacro(text, lib.name, lib.block);
+        text = withLibraryMacro(
+          text,
+          lib.name,
+          lib.block,
+          as: libraryPreviewMacro,
+        );
       } on Object {
         text = null;
       }
@@ -711,7 +716,13 @@ class _MingetPanelState extends State<MingetPanel> {
     Service? service;
     String? error;
     try {
-      service = Service.parseString(mingetPreviewText(text, m.name, args));
+      service = Service.parseString(
+        mingetPreviewText(
+          text,
+          lib == null ? m.name : libraryPreviewMacro,
+          args,
+        ),
+      );
     } on Object catch (e) {
       error = (e is ServiceException ? e.message : '$e').replaceFirst(
         RegExp(r'^pages\.' + mingetPage + r'\.ecran\[1\] \(macro\) : '),

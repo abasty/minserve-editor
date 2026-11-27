@@ -4,6 +4,8 @@ import 'package:minserve_core/minserve_core.dart';
 import 'package:minserve_editor/src/graph/library.dart';
 import 'package:minserve_editor/src/graph/minget_panel.dart';
 import 'package:minserve_editor/src/graph/service_edit.dart';
+import 'package:minserve_editor/src/preview/page_preview.dart';
+import 'package:minterm_view/minterm_view.dart';
 
 import 'editor_page_test.dart' show pumpEditor, FakeFiles, codeText, viewTab;
 
@@ -45,6 +47,7 @@ macros:
 
 void main() {
   pickerTests();
+  sameNameTests();
   late List<LibraryMinget> library;
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +74,313 @@ void main() {
       expect(service.pages[mingetPage], isNotNull, reason: m.name);
       // Aucun paramètre sans type : la bibliothèque est en forme étendue.
       expect(m.definition.extended, true, reason: m.name);
+    }
+  });
+
+  test(
+    'titre-centre : la colonne se calcule d\'après la longueur du texte',
+    () {
+      final m = library.firstWhere((m) => m.name == 'titre-centre');
+      String row(String text, int from, int length) {
+        final service = Service.parseString(
+          mingetPreviewText(
+            withLibraryMacro(_noMacros, m.name, m.block),
+            m.name,
+            [4, text],
+          ),
+        );
+        final minitel = renderPreview(
+          service,
+          service.pages[mingetPage]!,
+        ).minitel;
+        return String.fromCharCodes([
+          for (var c = from; c < from + length; c++)
+            minitel.screen[4][c].code & 0x7F,
+        ]);
+      }
+
+      // 40 colonnes : « Menu » (4 lettres) commence en colonne 19, « Accueil » (7) en 17.
+      expect(row('Menu', 19, 4), 'Menu');
+      expect(row('Accueil', 17, 7), 'Accueil');
+      // Un texte de 40 caractères commence en colonne 1.
+      final long = 'x' * 40;
+      expect(row(long, 1, 40), long);
+    },
+  );
+
+  group('fond : position, taille, couleur, bord', () {
+    LibraryMinget fond() => library.firstWhere((m) => m.name == 'fond');
+
+    TMinitel draw(List<Object?> args) {
+      final service = Service.parseString(
+        mingetPreviewText(
+          withLibraryMacro(_noMacros, fond().name, fond().block),
+          fond().name,
+          args,
+        ),
+      );
+      final data = renderPreview(service, service.pages[mingetPage]!);
+      expect(data.error, isNull);
+      return data.minitel;
+    }
+
+    String row(TMinitel t, int r, int from, int length) => String.fromCharCodes(
+      [for (var c = from; c < from + length; c++) t.screen[r][c].code & 0x7F],
+    );
+
+    List<int> cell(TMinitel t, int r, int c) => [
+      t.screen[r][c].code,
+      t.screen[r][c].gAttr,
+      t.screen[r][c].lAttr,
+    ];
+
+    test('avec bord : traits, côtés, nombre de lignes et de colonnes', () {
+      final t = draw([1, 1, 3, 10, 'rouge', 1]);
+      // Trois lignes en double hauteur : lignes d'écran 2 à 7, trait du bas en 8.
+      expect(row(t, 1, 2, 11), '_' * 11);
+      for (var r = 2; r <= 7; r++) {
+        expect(row(t, r, 1, 2), '}{', reason: 'ligne $r');
+        expect(row(t, r, 13, 1), '{', reason: 'ligne $r');
+      }
+      expect(row(t, 8, 2, 11), '~' * 11);
+      expect(row(t, 8, 1, 1), ' ');
+      expect(row(t, 9, 1, 3), '   ');
+    });
+
+    test('par défaut : tout l\'écran, 11 lignes de 36 colonnes', () {
+      final t = draw([1, 1, 11, 36, 'rouge', 1]);
+      expect(row(t, 1, 2, 37), '_' * 37);
+      expect(row(t, 23, 1, 2), '}{');
+      expect(row(t, 23, 39, 1), '{');
+      expect(row(t, 24, 2, 37), '~' * 37);
+    });
+
+    test('la ligne et la colonne d\'origine déplacent tout le fond', () {
+      final base = draw([1, 1, 2, 8, 'rouge', 1]);
+      final moved = draw([6, 20, 2, 8, 'rouge', 1]);
+      // Le coin (1, 1) devient (6, 20) : tout glisse de 5 lignes et 19 colonnes.
+      for (var r = 1; r <= 6; r++) {
+        for (var c = 1; c <= 12; c++) {
+          expect(
+            cell(moved, r + 5, c + 19),
+            cell(base, r, c),
+            reason: 'case $r,$c',
+          );
+        }
+      }
+      // Rien n'est resté à l'ancienne place.
+      expect(row(moved, 1, 1, 12), ' ' * 12);
+      expect(row(moved, 2, 1, 3), '   ');
+      // Le trait du bas : ligne + 2 * lignes + 1 = 11.
+      expect(row(moved, 11, 21, 9), '~' * 9);
+    });
+
+    test('la couleur de la bande se choisit', () {
+      final rouge = draw([1, 1, 1, 6, 'rouge', 1]);
+      final bleu = draw([1, 1, 1, 6, 'bleu', 1]);
+      final bleu2 = draw([1, 1, 1, 6, 'bleu', 1]);
+      // La bande (colonnes 3 à 8, ligne d'écran 3) change avec la couleur...
+      expect(cell(bleu, 3, 5), isNot(cell(rouge, 3, 5)));
+      // ... et c'est la seule différence : les traits et le bord restent.
+      expect(row(bleu, 3, 1, 2), row(rouge, 3, 1, 2));
+      expect(cell(bleu, 3, 5), cell(bleu2, 3, 5));
+      expect(() => draw([1, 1, 1, 6, 'turquoise', 1]), throwsA(anything));
+    });
+
+    test('sans bord : la bande reste en place, rien d\'autre', () {
+      final avec = draw([1, 1, 3, 10, 'rouge', 1]);
+      final sans = draw([1, 1, 3, 10, 'rouge', 0]);
+      for (var r = 1; r <= 8; r++) {
+        for (var c = 1; c <= 40; c++) {
+          final bord = [1, 2, 13].contains(c) || r == 1 || r == 8;
+          if (bord) {
+            // Ni caractère ni trait : une case vide.
+            expect(
+              sans.screen[r][c].code & 0x7F,
+              0x20,
+              reason: 'ligne $r colonne $c',
+            );
+          } else if (c >= 3 && c <= 12) {
+            // La bande est celle d'avant : mêmes attributs, mêmes cases.
+            expect(
+              cell(sans, r, c),
+              cell(avec, r, c),
+              reason: 'ligne $r colonne $c',
+            );
+          }
+        }
+      }
+    });
+
+    test('des valeurs hors bornes sont refusées', () {
+      for (final args in [
+        [0, 1, 3, 10, 'rouge', 1],
+        [22, 1, 3, 10, 'rouge', 1],
+        [1, 0, 3, 10, 'rouge', 1],
+        [1, 38, 3, 10, 'rouge', 1],
+        [1, 1, 12, 10, 'rouge', 1],
+        [1, 1, 3, 37, 'rouge', 1],
+        [1, 1, 3, 10, 'rouge', 2],
+      ]) {
+        expect(
+          () => Service.parseString(
+            mingetPreviewText(
+              withLibraryMacro(_noMacros, fond().name, fond().block),
+              fond().name,
+              args,
+            ),
+          ),
+          throwsA(isA<ServiceException>()),
+          reason: '$args',
+        );
+      }
+    });
+  });
+
+  test('cadre-3d : le cadre seul, sans le fond rouge autour', () {
+    final m = library.firstWhere((m) => m.name == 'cadre-3d');
+    expect(m.definition.parameters.map((p) => p.name), [
+      'ligne',
+      'col',
+      'lignes',
+      'colonnes',
+    ]);
+    final service = Service.parseString(
+      mingetPreviewText(withLibraryMacro(_noMacros, m.name, m.block), m.name, [
+        5,
+        3,
+        2,
+      ]),
+    );
+    final data = renderPreview(service, service.pages[mingetPage]!);
+    expect(data.error, isNull);
+    int code(int r, int c) => data.minitel.screen[r][c].code & 0x7F;
+    // Le cadre : lignes 5 à 5 + 3 + 2 = 10, colonnes 3 à 38 (« o » ou « j » en 39).
+    final empty = data.minitel.screen[15][20];
+    for (var r = 5; r <= 10; r++) {
+      for (var c = 3; c <= 38; c++) {
+        final cell = data.minitel.screen[r][c];
+        if (r == 7 || r == 8) {
+          // Les lignes de texte : des espaces, mais sur le fond du cadre.
+          expect(
+            [cell.gAttr, cell.lAttr],
+            isNot([empty.gAttr, empty.lAttr]),
+            reason: 'texte $r,$c',
+          );
+        } else {
+          expect(code(r, c), isNot(0x20), reason: 'cadre $r,$c');
+        }
+      }
+    }
+    expect(
+      [code(6, 39), code(7, 39), code(8, 39), code(9, 39)],
+      [
+        0x6F, // « o » après la bande foncée
+        0x6A, // « j » après chaque ligne de texte
+        0x6A,
+        0x6A,
+      ],
+    );
+    // Pas de bloc plein (0x7f) : ni sur les côtés, ni en dessous.
+    for (var r = 1; r <= 24; r++) {
+      for (var c = 1; c <= 40; c++) {
+        expect(code(r, c), isNot(0x7F), reason: 'bloc plein $r,$c');
+      }
+    }
+    // Rien en colonnes 1 et 2, rien avant ni après le cadre.
+    for (var r = 5; r <= 10; r++) {
+      expect([code(r, 1), code(r, 2), code(r, 40)], [0x20, 0x20, 0x20]);
+    }
+    expect([code(4, 10), code(11, 10)], [0x20, 0x20]);
+  });
+
+  test('cadre-3d : le nombre de colonnes', () {
+    final m = library.firstWhere((m) => m.name == 'cadre-3d');
+    TMinitel draw(int colonnes) {
+      final service = Service.parseString(
+        mingetPreviewText(
+          withLibraryMacro(_noMacros, m.name, m.block),
+          m.name,
+          [2, 3, 3, colonnes],
+        ),
+      );
+      final data = renderPreview(service, service.pages[mingetPage]!);
+      expect(data.error, isNull);
+      return data.minitel;
+    }
+
+    int code(TMinitel t, int r, int c) => t.screen[r][c].code & 0x7F;
+    for (final colonnes in [1, 10, 36]) {
+      final t = draw(colonnes);
+      // Lignes 2 à 2 + 3 + 3 = 8 : la barre du haut (2) fait « colonnes » cases,
+      // en colonnes 3 à colonnes + 2, et rien de plus loin.
+      for (var c = 3; c <= colonnes + 2; c++) {
+        expect(code(t, 2, c), 0x2F, reason: '$colonnes colonnes, haut $c');
+      }
+      expect(code(t, 2, colonnes + 3), 0x20, reason: '$colonnes colonnes');
+      // Le bord de droite (« o » sous la barre, « j » ensuite) suit la bande.
+      expect(code(t, 3, colonnes + 3), 0x6F, reason: '$colonnes colonnes');
+      expect(code(t, 4, colonnes + 3), 0x6A, reason: '$colonnes colonnes');
+      for (var r = 2; r <= 8; r++) {
+        for (var c = colonnes + 4; c <= 40; c++) {
+          expect(code(t, r, c), 0x20, reason: 'dehors $r,$c');
+        }
+      }
+    }
+  });
+
+  test('cadre-3d : la colonne de gauche déplace tout le cadre', () {
+    final m = library.firstWhere((m) => m.name == 'cadre-3d');
+    TMinitel draw(int col) {
+      final service = Service.parseString(
+        mingetPreviewText(
+          withLibraryMacro(_noMacros, m.name, m.block),
+          m.name,
+          [4, col, 2, 10],
+        ),
+      );
+      final data = renderPreview(service, service.pages[mingetPage]!);
+      expect(data.error, isNull);
+      return data.minitel;
+    }
+
+    List<int> cell(TMinitel t, int r, int c) => [
+      t.screen[r][c].code,
+      t.screen[r][c].gAttr,
+      t.screen[r][c].lAttr,
+    ];
+
+    final base = draw(3);
+    final moved = draw(20);
+    // Un décalage de 17 colonnes : le cadre (lignes 4 à 4 + 3 + 2 = 9, colonnes 3
+    // à 13) se retrouve à l'identique en colonnes 20 à 30.
+    for (var r = 4; r <= 9; r++) {
+      for (var c = 2; c <= 14; c++) {
+        expect(cell(moved, r, c + 17), cell(base, r, c), reason: 'case $r,$c');
+      }
+    }
+    // Rien n'est resté à l'ancienne place, ni plus loin à droite.
+    for (var r = 4; r <= 9; r++) {
+      for (var c = 1; c <= 18; c++) {
+        expect(moved.screen[r][c].code & 0x7F, 0x20, reason: 'avant $r,$c');
+      }
+      for (var c = 32; c <= 40; c++) {
+        expect(moved.screen[r][c].code & 0x7F, 0x20, reason: 'après $r,$c');
+      }
+    }
+    // Hors bornes : colonne 1 (pas de place pour le séparateur) ou 40.
+    for (final col in [1, 40]) {
+      expect(
+        () => Service.parseString(
+          mingetPreviewText(
+            withLibraryMacro(_noMacros, m.name, m.block),
+            m.name,
+            [4, col, 2, 10],
+          ),
+        ),
+        throwsA(isA<ServiceException>()),
+        reason: 'col $col',
+      );
     }
   });
 
@@ -168,7 +478,8 @@ void main() {
     // Les deux sections : le service (vide ici) et la bibliothèque.
     expect(find.text('Du service (0)'), findsOneWidget);
     expect(find.byKey(const Key('no-macros')), findsOneWidget);
-    expect(find.text('Bibliothèque (6)'), findsOneWidget);
+    expect(find.byKey(const Key('section-library')), findsOneWidget);
+    expect(find.textContaining('Bibliothèque ('), findsOneWidget);
     expect(find.byKey(const Key('lib-cadre-3d')), findsOneWidget);
     expect(find.byKey(const Key('lib-option')), findsOneWidget);
     expect(find.byKey(const Key('lib-new')), findsAtLeastNWidgets(4));
@@ -276,7 +587,7 @@ pages:
     await tester.enterText(find.byKey(const Key('instruction-filter')), 'cad');
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('instruction-lib-cadre-3d')), findsOneWidget);
-    expect(find.textContaining('(bibliothèque)'), findsOneWidget);
+    expect(find.textContaining('(bibliothèque)'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('choisir un modèle l\'ajoute au service avec son appel', (
@@ -302,5 +613,62 @@ pages:
     await tester.tap(find.byKey(const Key('undo')));
     await tester.pumpAndSettle();
     expect(codeText(tester), service);
+  });
+}
+
+/// Un minget du service qui a le nom d'un modèle de la bibliothèque, mais pas les
+/// mêmes paramètres : l'essayer ne doit pas casser les appels du service.
+void sameNameTests() {
+  const service = r'''
+debut: a
+macros:
+  cadre-3d:
+    - position: {ligne: $1, col: 1}
+    - ecrit: "$2 $3 $4 $5"
+pages:
+  a:
+    ecran:
+      - macro: [cadre-3d, 5, "x", "y", "z", "t"]
+''';
+
+  Future<void> open(WidgetTester tester) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), service);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(viewTab('Mingets'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  test('l\'aperçu d\'un modèle n\'écrase pas le minget du service', () async {
+    final lib = (await libraryMingets()).firstWhere(
+      (m) => m.name == 'cadre-3d',
+    );
+    final text = withLibraryMacro(
+      service,
+      lib.name,
+      lib.block,
+      as: libraryPreviewMacro,
+    );
+    final parsed = Service.parseString(
+      mingetPreviewText(text, libraryPreviewMacro, [5, 3, 2, 36]),
+    );
+    // Les deux existent : celle du service (5 paramètres) et celle du modèle (4).
+    expect(parsed.macros['cadre-3d']!.arity, 5);
+    expect(parsed.macros[libraryPreviewMacro]!.arity, 4);
+  });
+
+  testWidgets('le modèle s\'affiche malgré le minget du même nom', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('lib-cadre-3d')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('minget-error')), findsNothing);
+    expect(find.byKey(const Key('preview-screen')), findsOneWidget);
+    expect(find.byKey(const Key('library-differs')), findsOneWidget);
   });
 }

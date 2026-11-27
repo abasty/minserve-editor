@@ -7,57 +7,75 @@
 # définition), des définitions autonomes (sans appel d'une autre macro).
 # Ces définitions viennent de l'exemple de Minserve (example/service.yaml).
 macros:
-  # Un titre centré en double hauteur, ligne 4 : [colonne, texte].
+  # Un titre centré en double hauteur : [ligne, texte]. La colonne se calcule d'après la longueur du
+  # texte (40 colonnes, la double hauteur ne change pas la largeur) ; un texte de plus de 40
+  # caractères commence en colonne 1.
   titre-centre:
-    description: "Un titre en double hauteur sur la ligne 4"
+    description: "Un titre centré en double hauteur : la colonne se calcule d'après la longueur du texte"
     parametres:
-      - {nom: col, type: entier, defaut: 14, min: 1, max: 40, description: "Colonne de départ"}
-      - {nom: texte, type: texte, defaut: "Titre"}
+      - {nom: ligne, type: entier, defaut: 4, min: 1, max: 23}
+      - {nom: texte, type: texte, defaut: "Titre", description: "Le titre (40 caractères au plus)"}
     ecran:
-      - position: {ligne: 4, col: $1}
+      - position: {ligne: $1, col: "$(max(1, (40 - longueur($2)) / 2 + 1))"}
       - doublehauteur                            # aussi : doublelargeur, doubletaille, taillenormale
       - ecrit: "$2"
 
-  # Le fond d'un menu, le même cadre : [ligne du haut, lignes de texte, lignes rouges ensuite].
-  # Le cadre fait 4 lignes de plus que ses lignes de texte (haut, bande foncée, bas, ombre).
+  # Le cadre en relief d'un menu, sans son fond : [ligne du haut, colonne, lignes de texte, colonnes].
+  # Il occupe les colonnes « col » à « col » + « colonnes » - 1, plus le bord de droite juste après
+  # (colonne 39 par défaut), et fait 4 lignes de plus que ses lignes de texte (haut, bande foncée, bas,
+  # ombre). Le fond rouge qui l'entourait se dessine à part (voir « fond »). Chaque ligne est placée par
+  # un « position » (les attributs et le mode semi-graphique sont à refaire à chaque ligne). Un espace
+  # juste avant le cadre (colonne « col » - 1) sert de séparateur : une couleur de fond ne prend effet
+  # qu'après un espace. Il faut que « col » + « colonnes » tienne dans les 40 colonnes.
   cadre-3d:
-    description: "Un cadre en relief pour un menu : haut, bande foncée, bas et ombre"
+    description: "Un cadre en relief pour un menu, sans fond : position et taille au choix"
     parametres:
       - {nom: ligne, type: entier, defaut: 5, min: 1, max: 20, description: "Ligne du haut"}
+      - {nom: col, type: entier, defaut: 3, min: 2, max: 39, description: "Colonne de gauche du cadre"}
       - {nom: lignes, type: entier, defaut: 6, min: 0, max: 16, description: "Lignes de texte dans le cadre"}
-      - {nom: rouges, type: entier, defaut: 2, min: 0, max: 16, description: "Lignes rouges ensuite"}
+      - {nom: colonnes, type: entier, defaut: 36, min: 1, max: 36, description: "Largeur du cadre, sans ses bords"}
     ecran:
-      - position: {ligne: $1, col: 1}
+      - position: {ligne: $1, col: "$($2 - 1)"}
       - couleur: {texte: rouge, fond: cyan}
+      - ecrit: " "
       - graphique
-      - ecrit: "\x7f\x7f"
-      - repete: {caractere: "/", nombre: 36}
-      - ecrit: "\x7f\x7f\x7f\x7f"
+      - repete: {caractere: "/", nombre: $4}
+
+      - position: {ligne: "$($1 + 1)", col: "$($2 - 1)"}
       - couleur: {texte: magenta, fond: vert}
-      - repete: {caractere: "|", nombre: 36}
+      - ecrit: " "
+      - graphique
+      - repete: {caractere: "|", nombre: $4}
       - couleur: {texte: rouge, fond: noir}
-      - ecrit: "o\x7f\x7f\x7f"
-      - fois:
-          nombre: $2
-          ecran:
-            - couleur: {fond: magenta}
-            - repete: {caractere: " ", nombre: 36}
-            - couleur: {fond: noir}
-            - ecrit: "j\x7f\x7f\x7f"
-      - couleur: {fond: magenta}
-      - repete: {caractere: "p", nombre: 36}
-      - couleur: {fond: noir}
-      - ecrit: "j\x7f\x7f\x7f"
-      - couleur: {texte: bleu}
-      - ecrit: "#"
-      - couleur: {fond: noir}
-      - repete: {caractere: "#", nombre: 35}
-      - couleur: {texte: rouge}
-      - ecrit: "j\x7f"
+      - ecrit: "o"
+
       - fois:
           nombre: $3
+          variable: i
           ecran:
-            - repete: {caractere: "\x7f", nombre: 40}
+            - position: {ligne: "$($1 + 2 + $i)", col: "$($2 - 1)"}
+            - couleur: {texte: rouge, fond: magenta}
+            - ecrit: " "
+            - graphique
+            - repete: {caractere: " ", nombre: $4}
+            - couleur: {fond: noir}
+            - ecrit: "j"
+
+      - position: {ligne: "$($1 + 2 + $3)", col: "$($2 - 1)"}
+      - couleur: {texte: rouge, fond: magenta}
+      - ecrit: " "
+      - graphique
+      - repete: {caractere: "p", nombre: $4}
+      - couleur: {fond: noir}
+      - ecrit: "j"
+
+      - position: {ligne: "$($1 + 3 + $3)", col: "$($2 - 1)"}
+      - couleur: {texte: bleu, fond: noir}
+      - ecrit: " "
+      - graphique
+      - repete: {caractere: "#", nombre: $4}
+      - couleur: {texte: rouge}
+      - ecrit: "j"
 
   # Une ligne de menu : [ligne, colonne, lettre, libellé]. La lettre du choix est en double
   # largeur, le libellé est ce qui la suit. La barre fait 33 colonnes en tout (4 avant le libellé),
@@ -113,3 +131,66 @@ macros:
       - couleur: {texte: blanc, fond: bleu}
       - ecrit: " Votre choix :"
       - effacefindeligne
+
+  # Un fond en double hauteur : [ligne, col, lignes, colonnes, couleur, bord]. (ligne, col) est le coin
+  # en haut à gauche de l'ensemble, bord compris. Chaque ligne est en double hauteur (2 lignes d'écran) ;
+  # l'intérieur est une bande de « colonnes » colonnes de la « couleur » donnée, entre un bord à gauche
+  # (« } », « { ») et un bord à droite (« { »), avec un trait « _ » au-dessus et un trait « ~ » en dessous.
+  # Il faut que col + colonnes + 3 tienne dans les 40 colonnes, et ligne + 2 * lignes + 1 dans les 24 lignes.
+  # « bord » vaut 1 (bord affiché) ou 0 (la bande seule, au même endroit) : une macro ne sait pas encore
+  # tester un booléen, on répète donc les éléments du bord « bord » fois, c'est-à-dire une fois ou pas du tout.
+  fond:
+    description: "Un fond en double hauteur : position, taille, couleur, bord affiché ou non"
+    parametres:
+      - {nom: ligne, type: entier, defaut: 1, min: 1, max: 21, description: "Ligne du coin en haut à gauche"}
+      - {nom: col, type: entier, defaut: 1, min: 1, max: 37, description: "Colonne du coin en haut à gauche"}
+      - {nom: lignes, type: entier, defaut: 11, min: 1, max: 11, description: "Nombre de lignes, chacune en double hauteur (2 lignes d'écran)"}
+      - {nom: colonnes, type: entier, defaut: 36, min: 1, max: 36, description: "Largeur de la bande intérieure"}
+      - {nom: couleur, type: texte, defaut: "rouge", description: "Couleur de la bande : noir, rouge, vert, jaune, bleu, magenta, cyan ou blanc"}
+      - {nom: bord, type: entier, defaut: 1, min: 0, max: 1, description: "1 : bord affiché, 0 : sans bord"}
+    ecran:
+      # Le trait du haut.
+      - fois:
+          nombre: $6
+          ecran:
+            - position: {ligne: $1, col: "$($2 + 1)"}
+            - repete: {caractere: "_", nombre: "$($4 + 1)"}
+
+      # Les lignes : la ligne i est à la ligne d'écran ligne + 2 + 2 * i.
+      - fois:
+          nombre: $3
+          variable: i
+          ecran:
+            - position: {ligne: "$($1 + 2 + 2 * $i)", col: $2}
+            - doublehauteur
+            # Le bord de gauche ; sans bord, on saute ses deux colonnes pour que la bande reste en place.
+            - fois:
+                nombre: $6
+                ecran:
+                  - ecrit: "}"
+            - fois:
+                nombre: "$(1 - $6)"
+                ecran:
+                  - deplace: {col: 2}
+            - couleur: {texte: $5}
+            - inversion: actif
+            - fois:
+                nombre: $6
+                ecran:
+                  - ecrit: "{"
+            # La bande.
+            - repete: {caractere: " ", nombre: $4}
+            # Le bord de droite.
+            - couleur: {texte: blanc}
+            - inversion: inactif
+            - fois:
+                nombre: $6
+                ecran:
+                  - ecrit: "{"
+
+      # Le trait du bas, juste sous la dernière ligne (ligne d'écran ligne + 2 * lignes + 1).
+      - fois:
+          nombre: $6
+          ecran:
+            - position: {ligne: "$($1 + 2 * $3 + 1)", col: "$($2 + 1)"}
+            - repete: {caractere: "~", nombre: "$($4 + 1)"}

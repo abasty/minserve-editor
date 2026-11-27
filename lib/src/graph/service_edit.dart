@@ -1445,13 +1445,25 @@ LibraryState libraryState(String text, String name, List<String> block) {
       : LibraryState.different;
 }
 
-/// Le texte du service où la macro [name] est celle de [block] (la sienne est
-/// remplacée si elle existe). Il ne sert qu'à l'aperçu (voir [mingetPreviewText]).
-String withLibraryMacro(String text, String name, List<String> block) {
+/// Le nom sous lequel un modèle de la bibliothèque est essayé dans un service :
+/// un nom à part, pour ne pas remplacer (et casser les appels de) un minget du
+/// service qui porte le même nom.
+const libraryPreviewMacro = '__bibliotheque__';
+
+/// Le texte du service avec, en plus, la macro décrite par [block] (la
+/// définition de [name] dans la bibliothèque), sous le nom [as] (par défaut
+/// [name], dont la macro du service est alors remplacée). Il ne sert qu'à
+/// l'aperçu (voir [mingetPreviewText]).
+String withLibraryMacro(
+  String text,
+  String name,
+  List<String> block, {
+  String? as,
+}) {
   final root = _plain(loadYaml(text));
   if (root is! Map) throw EditException('Le texte n\'est pas un service.');
   final macros = root['macros'] is Map ? root['macros'] as Map : {};
-  macros[name] = _blockMacro(block, name);
+  macros[as ?? name] = _blockMacro(block, name);
   root['macros'] = macros;
   return jsonEncode(root);
 }
