@@ -105,6 +105,7 @@ Future<void> pumpEditor(
         initialFile: file,
         startupMessage: message,
         guardClose: guardClose,
+        initialMode: ViewMode.both,
         settings: settings,
       ),
     ),

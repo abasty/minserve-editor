@@ -47,6 +47,7 @@ class EditorPage extends StatefulWidget {
     this.startupMessage,
     this.guardClose = false,
     this.settings,
+    this.initialMode = ViewMode.graph,
   }) : files = files ?? const BrowserFileAccess();
 
   final FileAccess files;
@@ -54,6 +55,9 @@ class EditorPage extends StatefulWidget {
   /// Ce que l'éditeur retient d'une fois sur l'autre (fichiers récents, dossier
   /// assets de chaque service).
   final AppSettings? settings;
+
+  /// La vue au départ : le graphe seul (le texte se montre à la demande).
+  final ViewMode initialMode;
 
   /// Le fichier à montrer au départ (nommé sur la ligne de commande) ; sinon
   /// un nouveau service.
@@ -77,7 +81,10 @@ class _EditorPageState extends State<EditorPage> {
   final _commands = CodeEditorController();
   Timer? _timer;
   late Diagnostics _diagnostics = diagnose(_initialText);
-  ViewMode _mode = ViewMode.both;
+  late ViewMode _mode = widget.initialMode;
+
+  /// Augmente à chaque fichier chargé : le graphe se recadre alors sur l'écran.
+  int _loads = 0;
 
   /// Le graphe du dernier texte valide : il reste affiché tant que le texte
   /// est invalide.
@@ -336,6 +343,7 @@ class _EditorPageState extends State<EditorPage> {
     _typing = false;
     _history.clear();
     setState(() {
+      _loads++;
       _name = name;
       _path = path;
       _saved = text;
@@ -742,6 +750,7 @@ class _EditorPageState extends State<EditorPage> {
                                     stale: _diagnostics.isValid
                                         ? null
                                         : _statusText(),
+                                    fitToken: _loads,
                                   ),
                           ),
                         ),

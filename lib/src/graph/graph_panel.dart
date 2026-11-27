@@ -48,6 +48,7 @@ class GraphPanel extends StatefulWidget {
     this.editing,
     this.service,
     this.stale,
+    this.fitToken = 0,
   });
 
   final ServiceGraph graph;
@@ -68,6 +69,10 @@ class GraphPanel extends StatefulWidget {
 
   /// Si le texte n'est plus valide : pourquoi ce graphe est celui d'avant.
   final String? stale;
+
+  /// Quand il change (un autre fichier est chargé), le graphe se recadre sur la
+  /// fenêtre, comme « Tout voir ».
+  final int fitToken;
 
   @override
   State<GraphPanel> createState() => _GraphPanelState();
@@ -141,6 +146,9 @@ class _GraphPanelState extends State<GraphPanel> {
   @override
   void didUpdateWidget(GraphPanel old) {
     super.didUpdateWidget(old);
+    // Un autre fichier : on recadre dès que le graphe a une taille à l'écran (tout
+    // de suite, ou quand on le montre si le texte seul est affiché).
+    if (old.fitToken != widget.fitToken) _fitted = false;
     final pending = _pending;
     if (pending != null && widget.graph.nodes.containsKey(pending)) {
       _pending = null;
@@ -502,6 +510,7 @@ class _GraphPanelState extends State<GraphPanel> {
                   });
                 }
                 return ClipRect(
+                  key: const Key('graph-area'),
                   child: InteractiveViewer(
                     transformationController: _view,
                     constrained: false,
