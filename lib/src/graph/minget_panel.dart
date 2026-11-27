@@ -134,7 +134,7 @@ class _MingetPanelState extends State<MingetPanel> {
     super.initState();
     _lib = widget.library;
     if (_lib == null) {
-      loadLibrary().then(
+      libraryMingets().then(
         (lib) {
           if (mounted) setState(() => _lib = lib);
         },

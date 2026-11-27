@@ -44,10 +44,11 @@ macros:
 ''';
 
 void main() {
+  pickerTests();
   late List<LibraryMinget> library;
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    library = await loadLibrary();
+    library = await libraryMingets();
   });
 
   test('la bibliothèque livrée est valide, chaque minget se rend', () {
@@ -220,5 +221,86 @@ void main() {
     expect(codeText(tester), contains('  option-2:\n'));
     expect(codeText(tester), contains('  option:\n    - efface'));
     expect(find.byKey(const Key('minget-option-2')), findsOneWidget);
+  });
+}
+
+/// Le sélecteur d'instruction de l'onglet Écran propose aussi la bibliothèque.
+void pickerTests() {
+  const service = r'''
+debut: a
+macros:
+  option:
+    - efface
+pages:
+  a:
+    ecran:
+      - efface
+''';
+
+  Future<void> openScreen(WidgetTester tester, String text) async {
+    await pumpEditor(tester, FakeFiles());
+    await tester.enterText(find.byKey(const Key('code')), text);
+    await tester.pump(const Duration(milliseconds: 400));
+    // La bibliothèque se lit en vrai temps, pas en temps simulé.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('node-a')));
+    await tester.pump();
+    final tab = find.descendant(
+      of: find.byKey(const Key('page-tabs')),
+      matching: find.text('Écran'),
+    );
+    await tester.ensureVisible(tab);
+    await tester.tap(tab);
+    await tester.pumpAndSettle();
+    final add = find.byKey(const Key('screen-add-1')).first;
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('le sélecteur propose les modèles qui ne sont pas au service', (
+    tester,
+  ) async {
+    await openScreen(tester, service);
+    await tester.enterText(
+      find.byKey(const Key('instruction-filter')),
+      'option',
+    );
+    await tester.pumpAndSettle();
+    // « option » est déjà au service : une seule entrée, celle du service.
+    expect(find.byKey(const Key('instruction-macro-option')), findsOneWidget);
+    expect(find.byKey(const Key('instruction-lib-option')), findsNothing);
+    await tester.enterText(find.byKey(const Key('instruction-filter')), 'cad');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('instruction-lib-cadre-3d')), findsOneWidget);
+    expect(find.textContaining('(bibliothèque)'), findsOneWidget);
+  });
+
+  testWidgets('choisir un modèle l\'ajoute au service avec son appel', (
+    tester,
+  ) async {
+    await openScreen(tester, service);
+    await tester.enterText(
+      find.byKey(const Key('instruction-filter')),
+      'titre-s',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('instruction-lib-titre-simple')));
+    await tester.pumpAndSettle();
+    // Le formulaire d'appel, avec les valeurs par défaut du modèle.
+    expect(find.byKey(const Key('macro-arg-0')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dialog-ok')));
+    await tester.pumpAndSettle();
+    final text = codeText(tester);
+    expect(text, contains('  titre-simple:\n'));
+    expect(text, contains('- macro: [titre-simple]'));
+    expect(Service.parseString(text).macros.keys, ['option', 'titre-simple']);
+    // Une seule modification : un « défaire » retire le minget et l'appel.
+    await tester.tap(find.byKey(const Key('undo')));
+    await tester.pumpAndSettle();
+    expect(codeText(tester), service);
   });
 }

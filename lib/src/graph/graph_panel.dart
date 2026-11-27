@@ -8,6 +8,7 @@ import '../split_handle.dart';
 import 'graph_dialogs.dart';
 import '../preview/page_preview.dart';
 import '../preview/test_data.dart';
+import 'library.dart';
 import 'minget_panel.dart';
 import 'page_forms.dart';
 import 'screen_form.dart';
@@ -118,6 +119,17 @@ class _GraphPanelState extends State<GraphPanel> {
   double? _detailsHeight;
   double _heightAtDragStart = 0;
   final _detailsKey = GlobalKey();
+
+  /// Les modèles de la bibliothèque, une fois lus.
+  List<LibraryMinget> _library = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    libraryMingets().then((lib) {
+      if (mounted) setState(() => _library = lib);
+    }, onError: (Object _) {});
+  }
 
   @override
   void dispose() {
@@ -1008,6 +1020,7 @@ class _GraphPanelState extends State<GraphPanel> {
                   selected: pageMode ? _instr : null,
                   onSelect: pageMode ? _selectInstruction : null,
                   macros: widget.service?.macros ?? const {},
+                  library: _library,
                 )
               else if (tab == _PageTab.preview && widget.service != null)
                 PagePreview(

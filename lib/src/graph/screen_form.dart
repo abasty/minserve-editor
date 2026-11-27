@@ -8,6 +8,7 @@ import '../assets.dart';
 import 'asset_dialog.dart';
 import 'color_pick.dart';
 import 'extract_dialog.dart';
+import 'library.dart';
 import 'macro_call.dart';
 import 'minget_panel.dart' show mingetParamTypes;
 import 'page_forms.dart';
@@ -60,6 +61,7 @@ class ScreenForm extends StatefulWidget {
     this.selected,
     this.onSelect,
     this.macros = const {},
+    this.library = const [],
   });
 
   final String page;
@@ -75,6 +77,9 @@ class ScreenForm extends StatefulWidget {
   /// Les macros du service : on peut les insérer, et leurs appels se montrent
   /// avec un champ par paramètre.
   final Map<String, MacroDefinition> macros;
+
+  /// Les modèles de la bibliothèque, proposés avec les instructions.
+  final List<LibraryMinget> library;
 
   @override
   State<ScreenForm> createState() => _ScreenFormState();
@@ -131,10 +136,15 @@ class _ScreenFormState extends State<ScreenForm> {
       key: Key('screen-add-$at'),
       borderRadius: BorderRadius.circular(6),
       onTap: () async {
-        final picked = await askInstruction(context, macros: widget.macros);
+        final picked = await askInstruction(
+          context,
+          macros: widget.macros,
+          library: widget.library,
+        );
         if (picked == null || !context.mounted) return;
         var item = picked.text;
         final macro = picked.macro;
+        final lib = picked.library;
         if (macro != null) {
           // Un minget sans paramètre s'insère tout de suite ; sinon on demande
           // ses arguments.
@@ -144,7 +154,22 @@ class _ScreenFormState extends State<ScreenForm> {
           if (args == null) return;
           item = macroCallText(macro, args);
         }
-        if (item != null) apply((t) => insertScreenItem(t, page, at, item!));
+        if (item == null) return;
+        final line = item;
+        if (lib != null) {
+          // Le modèle de la bibliothèque entre dans le service en même temps que
+          // son appel : une seule modification, qu'un seul « défaire » annule.
+          apply(
+            (t) => insertScreenItem(
+              addLibraryMacro(t, lib.name, lib.block),
+              page,
+              at,
+              line,
+            ),
+          );
+        } else {
+          apply((t) => insertScreenItem(t, page, at, line));
+        }
       },
       child: Tooltip(message: 'Insérer une instruction', child: child),
     );
@@ -673,19 +698,29 @@ extension on _ScreenFormState {
 Future<PickedInstruction?> askInstruction(
   BuildContext context, {
   Map<String, MacroDefinition> macros = const {},
+  List<LibraryMinget> library = const [],
 }) => showDialog<PickedInstruction>(
   context: context,
-  builder: (context) => _InstructionDialog(macros),
+  builder: (context) => _InstructionDialog(macros, library),
 );
 
 /// L'instruction choisie : son texte (avec ses valeurs par défaut), ou un
 /// minget dont il faut encore demander les arguments.
 class PickedInstruction {
-  const PickedInstruction.text(String this.text) : macro = null;
-  const PickedInstruction.macro(MacroDefinition this.macro) : text = null;
+  const PickedInstruction.text(String this.text) : macro = null, library = null;
+  const PickedInstruction.macro(MacroDefinition this.macro)
+    : text = null,
+      library = null;
+
+  /// Un modèle de la bibliothèque : un minget qui n'est pas encore dans le
+  /// service et qu'il faut y copier avec l'appel.
+  PickedInstruction.library(LibraryMinget this.library)
+    : text = null,
+      macro = library.definition;
 
   final String? text;
   final MacroDefinition? macro;
+  final LibraryMinget? library;
 }
 
 /// Les macros de [macros] qui conviennent à [query] : celles dont le nom
@@ -726,9 +761,10 @@ List<(String, String)> matchingInstructions(String query) {
 }
 
 class _InstructionDialog extends StatefulWidget {
-  const _InstructionDialog(this.macros);
+  const _InstructionDialog(this.macros, this.library);
 
   final Map<String, MacroDefinition> macros;
+  final List<LibraryMinget> library;
 
   @override
   State<_InstructionDialog> createState() => _InstructionDialogState();
@@ -744,7 +780,9 @@ class _InstructionDialogState extends State<_InstructionDialog> {
     super.dispose();
   }
 
-  /// Les entrées de la liste : les instructions, puis les mingets du service.
+  /// Les entrées de la liste : les instructions, puis les mingets du service,
+  /// puis les modèles de la bibliothèque qui n'y sont pas (ceux dont le nom est
+  /// déjà pris se prennent dans le panneau Mingets, qui propose un autre nom).
   List<({String label, String key, PickedInstruction pick})> get _matches => [
     for (final (label, item) in matchingInstructions(_query.text))
       (
@@ -757,6 +795,17 @@ class _InstructionDialogState extends State<_InstructionDialog> {
         label: 'macro ${m.name} — ${m.description ?? 'minget du service'}',
         key: 'instruction-macro-${m.name}',
         pick: PickedInstruction.macro(m),
+      ),
+    for (final m in matchingMacros({
+      for (final l in widget.library)
+        if (!widget.macros.containsKey(l.name)) l.name: l.definition,
+    }, _query.text))
+      (
+        label: 'macro ${m.name} — ${m.description ?? 'modèle'} (bibliothèque)',
+        key: 'instruction-lib-${m.name}',
+        pick: PickedInstruction.library(
+          widget.library.firstWhere((l) => l.name == m.name),
+        ),
       ),
   ];
 

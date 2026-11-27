@@ -460,8 +460,13 @@ Chaque étape est livrable et utile seule ; on s'arrête après chacune.
        service, différent), le bascule service / bibliothèque disparaît ; un modèle choisi dit s'il est déjà dans le
        service et propose « Ajouter au service ». Les tests ouvrent une fenêtre de 900 px de haut (la barre ajoute
        44 px).
-     - **8e-1b, à faire** : proposer les mingets de la bibliothèque dans le sélecteur d'instruction de l'onglet
-       Écran (les ajouter au service au moment de les insérer, en une seule modification).
+     - **8e-1b, la bibliothèque dans le sélecteur d'instruction (faite)** : la liste du sélecteur (onglet Écran)
+       montre, après les instructions et les mingets du service, les modèles de la bibliothèque qui ne sont
+       pas au service, marqués « (bibliothèque) ». En choisir un ouvre le formulaire d'appel (valeurs par
+       défaut du modèle), puis écrit **en une seule modification** la définition dans `macros:` et l'appel dans
+       la page : un seul « défaire » retire les deux. Les modèles dont le nom est déjà pris par un minget
+       différent ne sont pas proposés ici : le panneau Mingets les ajoute sous un autre nom. La bibliothèque est
+       lue une fois (`libraryMingets()`) et partagée par le panneau Mingets et l'onglet Écran.
      - **8e-2, bibliothèque personnelle** : « Ajouter à ma bibliothèque » sur un minget du service ; stockage
        dans le navigateur (même format), plus « Exporter » / « Importer » un fichier `.yaml` de bibliothèque
        pour la partager ou la sauvegarder. Les modèles personnels s'affichent dans la même liste, avec une

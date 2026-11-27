@@ -38,3 +38,10 @@ List<LibraryMinget> parseLibrary(String text) {
 /// Lit la bibliothèque livrée avec l'éditeur.
 Future<List<LibraryMinget>> loadLibrary([AssetBundle? bundle]) async =>
     parseLibrary(await (bundle ?? rootBundle).loadString(libraryAsset));
+
+List<LibraryMinget>? _loaded;
+
+/// La bibliothèque livrée, lue une seule fois (et partagée par les panneaux qui
+/// la montrent).
+Future<List<LibraryMinget>> libraryMingets() async =>
+    _loaded ??= await loadLibrary();
